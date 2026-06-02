@@ -298,7 +298,7 @@ async function registerUser(event) {
       uid: userCredential.user.uid,
       email,
       displayName,
-      status: "pending",
+      status: "approved",
       role: "staff",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
@@ -394,7 +394,7 @@ async function ensureUserProfile(user) {
       uid: user.uid,
       email: user.email || "",
       displayName: fallbackDisplayName,
-      status: "pending",
+      status: "approved",
       role: "staff",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -407,7 +407,7 @@ async function ensureUserProfile(user) {
     uid: user.uid,
     email: data.email || user.email || "",
     displayName: data.displayName || fallbackDisplayName,
-    status: data.status || "pending",
+    status: data.status || "approved",
     role: data.role || "staff"
   };
 
