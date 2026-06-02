@@ -1,212 +1,161 @@
-// ================================
+// =====================
 // Firebase 設定
-// apiKey 以外は Firebase Console の Web アプリ設定から埋めてください
-// ================================
+// =====================
 const firebaseConfig = {
   apiKey: "AIzaSyAcm-D4KK0m0Q67rK4kiH8uMHlwBD5pU5Y",
   authDomain: "t-shift-35181.firebaseapp.com",
   projectId: "t-shift-35181",
   storageBucket: "t-shift-35181.firebasestorage.app",
   messagingSenderId: "692556391514",
-  appId: "1:692556391514:web:75f17766dfd862dd0b2463"
+  appId: "1:692556391514:web:75f17766dfd862dd0b2463",
+  measurementId: "G-GG395PKGZF"
 };
 
+
 firebase.initializeApp(firebaseConfig);
+
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-const SHIFT_TYPES = [
-  { key: "early", label: "早番" },
-  { key: "late", label: "遅番" }
-];
+// =====================
+// 定数
+// =====================
+const COLLECTIONS = {
+  staffs: "staffs",
+  applications: "applications",
+  assignments: "assignments"
+};
 
-const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土"];
+const DAY_NAMES = ["月", "火", "水", "木", "金", "土"];
+const SHIFT_LABELS = {
+  early: "早番",
+  late: "遅番"
+};
 
 const state = {
   currentUser: null,
-  profile: null,
-  targetWeek: null,
-  applications: [],
-  assignments: [],
-  approvedUsers: [],
-  pendingUsers: []
+  currentProfile: null,
+  currentMode: "staff",
+  weekInfo: null,
+  approvedUsers: []
 };
 
-const els = {
+// =====================
+// DOM
+// =====================
+const el = {
   toast: document.getElementById("toast"),
 
   authScreen: document.getElementById("auth-screen"),
   pendingScreen: document.getElementById("pending-screen"),
   staffScreen: document.getElementById("staff-screen"),
   managerScreen: document.getElementById("manager-screen"),
+  operatorScreen: document.getElementById("operator-screen"),
 
-  showLoginTabBtn: document.getElementById("show-login-tab"),
-  showRegisterTabBtn: document.getElementById("show-register-tab"),
+  showLoginTab: document.getElementById("show-login-tab"),
+  showRegisterTab: document.getElementById("show-register-tab"),
   loginTab: document.getElementById("login-tab"),
   registerTab: document.getElementById("register-tab"),
 
-  loginForm: document.getElementById("login-form"),
-  registerForm: document.getElementById("register-form"),
+  loginEmail: document.getElementById("login-email"),
+  loginPassword: document.getElementById("login-password"),
+  loginStaffBtn: document.getElementById("login-staff-btn"),
+  loginManagerBtn: document.getElementById("login-manager-btn"),
+  loginOperatorBtn: document.getElementById("login-operator-btn"),
 
-  pendingUserText: document.getElementById("pending-user-text"),
-  pendingLogoutBtn: document.getElementById("pending-logout-btn"),
+  registerForm: document.getElementById("register-tab"),
+  registerDisplayName: document.getElementById("register-display-name"),
+  registerEmail: document.getElementById("register-email"),
+  registerPassword: document.getElementById("register-password"),
+  registerPasswordConfirm: document.getElementById("register-password-confirm"),
 
-  staffLogoutBtn: document.getElementById("staff-logout-btn"),
-  managerLogoutBtn: document.getElementById("manager-logout-btn"),
+  pendingDisplayName: document.getElementById("pending-display-name"),
+  pendingEmail: document.getElementById("pending-email"),
+  pendingStatus: document.getElementById("pending-status"),
 
-  staffHeaderMeta: document.getElementById("staff-header-meta"),
-  staffFinalWeekLabel: document.getElementById("staff-final-week-label"),
-  staffApplyWeekLabel: document.getElementById("staff-apply-week-label"),
-  staffSubmissionCount: document.getElementById("staff-submission-count"),
+  staffWeekLabel: document.getElementById("staff-week-label"),
   staffFinalTable: document.getElementById("staff-final-table"),
   staffApplyList: document.getElementById("staff-apply-list"),
 
-  managerHeaderMeta: document.getElementById("manager-header-meta"),
-  managerRecruitingWeekLabel: document.getElementById("manager-recruiting-week-label"),
-  managerFinalWeekLabel: document.getElementById("manager-final-week-label"),
+  managerWeekLabel: document.getElementById("manager-week-label"),
+  managerSummary: document.getElementById("manager-summary"),
   managerRecruitingList: document.getElementById("manager-recruiting-list"),
-  managerFinalTable: document.getElementById("manager-final-table"),
-  pendingUserList: document.getElementById("pending-user-list"),
-
-  approvedCount: document.getElementById("approved-count"),
-  submittedCount: document.getElementById("submitted-count"),
-  notSubmittedCount: document.getElementById("not-submitted-count"),
-  applicationCount: document.getElementById("application-count"),
-
-  submittedUserList: document.getElementById("submitted-user-list"),
-  notSubmittedUserList: document.getElementById("not-submitted-user-list"),
-
+  submittedList: document.getElementById("submitted-list"),
+  notSubmittedList: document.getElementById("not-submitted-list"),
   generateScheduleBtn: document.getElementById("generate-schedule-btn"),
-  saveFinalBtn: document.getElementById("save-final-btn")
+  managerFinalEditTable: document.getElementById("manager-final-edit-table"),
+  saveFinalEditBtn: document.getElementById("save-final-edit-btn"),
+
+  operatorWeekLabel: document.getElementById("operator-week-label"),
+  operatorRecruitingList: document.getElementById("operator-recruiting-list"),
+  operatorFinalTable: document.getElementById("operator-final-table"),
+  operatorAccountList: document.getElementById("operator-account-list")
 };
 
-// ================================
-// 共通
-// ================================
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.classList.remove("hidden");
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => {
-    els.toast.classList.add("hidden");
-  }, 2500);
-}
+// =====================
+// 初期化
+// =====================
+bindEvents();
+auth.onAuthStateChanged(handleAuthStateChanged);
 
-function showOnlyScreen(screenEl) {
-  [els.authScreen, els.pendingScreen, els.staffScreen, els.managerScreen].forEach((el) => {
-    el.classList.add("hidden");
+function bindEvents() {
+  el.showLoginTab.addEventListener("click", () => switchAuthTab("login"));
+  el.showRegisterTab.addEventListener("click", () => switchAuthTab("register"));
+
+  el.loginStaffBtn.addEventListener("click", () => loginUser("staff"));
+  el.loginManagerBtn.addEventListener("click", () => loginUser("manager"));
+  el.loginOperatorBtn.addEventListener("click", () => loginUser("operator"));
+
+  el.registerForm.addEventListener("submit", registerUser);
+
+  document.querySelectorAll("[data-logout-button]").forEach((button) => {
+    button.addEventListener("click", logoutUser);
   });
-  screenEl.classList.remove("hidden");
-}
 
-function switchTab(buttons, panels, targetId) {
-  buttons.forEach((btn) => btn.classList.remove("active"));
-  panels.forEach((panel) => panel.classList.add("hidden"));
-
-  const activeBtn = [...buttons].find((btn) => btn.dataset.target === targetId);
-  const activePanel = document.getElementById(targetId);
-
-  if (activeBtn) activeBtn.classList.add("active");
-  if (activePanel) activePanel.classList.remove("hidden");
-}
-
-function formatMonthDay(date) {
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function formatDateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function getJSTNow() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-}
-
-function getNextWeekInfo() {
-  const now = getJSTNow();
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-
-  const day = today.getDay(); // 0=Sun ... 6=Sat
-  const diffToThisMonday = day === 0 ? -6 : 1 - day;
-
-  const thisMonday = new Date(today);
-  thisMonday.setDate(today.getDate() + diffToThisMonday);
-
-  const nextMonday = new Date(thisMonday);
-  nextMonday.setDate(thisMonday.getDate() + 7);
-
-  const dates = [];
-  for (let i = 0; i < 6; i++) {
-    const d = new Date(nextMonday);
-    d.setDate(nextMonday.getDate() + i);
-    dates.push(d);
-  }
-
-  return {
-    weekKey: formatDateKey(nextMonday),
-    monday: nextMonday,
-    dates,
-    label: `${formatMonthDay(dates[0])}(${WEEKDAY_LABELS[0]})〜${formatMonthDay(dates[5])}(${WEEKDAY_LABELS[5]})`
-  };
-}
-
-function getCellDocId(weekKey, dateKey, shiftType) {
-  return `${weekKey}_${dateKey}_${shiftType}`;
-}
-
-function getAssignmentMap(assignments) {
-  const map = {};
-  assignments.forEach((item) => {
-    map[`${item.dateKey}_${item.shiftType}`] = item;
+  document.querySelectorAll("[data-tab-group]").forEach((button) => {
+    button.addEventListener("click", handleTabClick);
   });
-  return map;
+
+  el.staffApplyList.addEventListener("click", handleApplyButtonClick);
+  el.generateScheduleBtn.addEventListener("click", generateSchedule);
+  el.saveFinalEditBtn.addEventListener("click", saveManualAssignments);
+  el.operatorAccountList.addEventListener("click", handleOperatorActionClick);
 }
 
-function getApplicationsMap(applications) {
-  const map = {};
-  applications.forEach((item) => {
-    const key = `${item.dateKey}_${item.shiftType}`;
-    if (!map[key]) map[key] = [];
-    map[key].push(item);
-  });
-  return map;
+// =====================
+// 認証タブ
+// =====================
+function switchAuthTab(type) {
+  const loginActive = type === "login";
+  el.showLoginTab.classList.toggle("active", loginActive);
+  el.showRegisterTab.classList.toggle("active", !loginActive);
+  el.loginTab.classList.toggle("hidden", !loginActive);
+  el.registerTab.classList.toggle("hidden", loginActive);
 }
 
-function escapeHtml(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function normalizeName(value) {
-  return String(value || "").trim().slice(0, 20);
-}
-
-// ================================
+// =====================
 // 認証
-// ================================
+// =====================
 async function registerUser(event) {
   event.preventDefault();
 
-  const email = document.getElementById("register-email").value.trim();
-  const password = document.getElementById("register-password").value;
-  const passwordConfirm = document.getElementById("register-password-confirm").value;
-  const displayName = normalizeName(document.getElementById("register-display-name").value);
+  const displayName = el.registerDisplayName.value.trim();
+  const email = el.registerEmail.value.trim();
+  const password = el.registerPassword.value;
+  const passwordConfirm = el.registerPasswordConfirm.value;
 
-  if (!email || !password || !passwordConfirm || !displayName) {
-    showToast("すべて入力してください");
+  if (!displayName || !email || !password || !passwordConfirm) {
+    showToast("登録項目を全部入力してください");
+    return;
+  }
+
+  if (password.length < 6) {
+    showToast("パスワードは6文字以上にしてください");
     return;
   }
 
   if (password !== passwordConfirm) {
-    showToast("パスワードが一致しません");
+    showToast("パスワード確認が一致しません");
     return;
   }
 
@@ -214,28 +163,31 @@ async function registerUser(event) {
     const userCredential = await auth.createUserWithEmailAndPassword(email, password);
     await userCredential.user.updateProfile({ displayName });
 
-    await db.collection("staffs").doc(userCredential.user.uid).set({
+    await db.collection(COLLECTIONS.staffs).doc(userCredential.user.uid).set({
       uid: userCredential.user.uid,
       email,
       displayName,
-      role: "staff",
       status: "pending",
+      role: "staff",
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true });
 
-    showToast("登録しました。管理者の承認待ちです");
-    event.target.reset();
+    showToast("登録できました。承認待ちです");
+    clearRegisterForm();
+    sessionStorage.setItem("loginMode", "staff");
   } catch (error) {
     console.error(error);
-    showToast("登録に失敗しました");
+    if (error.code === "auth/email-already-in-use") {
+      showToast("そのメールアドレスはすでに使われています");
+    } else {
+      showToast("登録に失敗しました");
+    }
   }
 }
 
-async function loginUser(event) {
-  event.preventDefault();
-
-  const email = document.getElementById("login-email").value.trim();
-  const password = document.getElementById("login-password").value;
+async function loginUser(mode) {
+  const email = el.loginEmail.value.trim();
+  const password = el.loginPassword.value;
 
   if (!email || !password) {
     showToast("メールアドレスとパスワードを入力してください");
@@ -243,8 +195,9 @@ async function loginUser(event) {
   }
 
   try {
+    sessionStorage.setItem("loginMode", mode);
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     await auth.signInWithEmailAndPassword(email, password);
-    event.target.reset();
   } catch (error) {
     console.error(error);
     showToast("ログインに失敗しました");
@@ -254,593 +207,332 @@ async function loginUser(event) {
 async function logoutUser() {
   try {
     await auth.signOut();
+    showToast("ログアウトしました");
   } catch (error) {
     console.error(error);
     showToast("ログアウトに失敗しました");
   }
 }
 
-async function ensureStaffProfile(user) {
-  const ref = db.collection("staffs").doc(user.uid);
-  const snap = await ref.get();
-
-  if (snap.exists) {
-    return snap.data();
-  }
-
-  const fallbackDisplayName = normalizeName(user.displayName || user.email?.split("@")[0] || "未設定");
-
-  const profile = {
-    uid: user.uid,
-    email: user.email || "",
-    displayName: fallbackDisplayName,
-    role: "staff",
-    status: "pending",
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  await ref.set(profile);
-  return profile;
-}
-
-// ================================
-// Firestore 取得
-// ================================
-async function loadWeekData() {
-  const weekKey = state.targetWeek.weekKey;
-
-  const [applicationsSnap, assignmentsSnap] = await Promise.all([
-    db.collection("applications")
-      .where("weekKey", "==", weekKey)
-      .get(),
-    db.collection("assignments")
-      .where("weekKey", "==", weekKey)
-      .get()
-  ]);
-
-  state.applications = applicationsSnap.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() }))
-    .sort((a, b) => {
-      const aTime = a.createdAt?.toMillis?.() ?? 0;
-      const bTime = b.createdAt?.toMillis?.() ?? 0;
-      return aTime - bTime;
-    });
-
-  state.assignments = assignmentsSnap.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() }));
-}
-
-async function loadApprovedUsers() {
-  const snap = await db.collection("staffs")
-    .where("status", "==", "approved")
-    .get();
-
-  state.approvedUsers = snap.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() }))
-    .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "ja"));
-}
-
-async function loadPendingUsers() {
-  const snap = await db.collection("staffs")
-    .where("status", "==", "pending")
-    .get();
-
-  state.pendingUsers = snap.docs
-    .map((doc) => ({ id: doc.id, ...doc.data() }))
-    .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "ja"));
-}
-
-// ================================
-// スタッフ画面
-// ================================
-function renderScheduleTable({ editable = false, mountEl }) {
-  const assignmentMap = getAssignmentMap(state.assignments);
-
-  let html = `
-    <table class="schedule-table">
-      <thead>
-        <tr>
-          <th></th>
-          ${state.targetWeek.dates.map((date, index) => `
-            <th>
-              ${formatMonthDay(date)}<br>
-              <span>${WEEKDAY_LABELS[index]}</span>
-            </th>
-          `).join("")}
-        </tr>
-      </thead>
-      <tbody>
-  `;
-
-  SHIFT_TYPES.forEach((shift) => {
-    html += `<tr><th>${shift.label}</th>`;
-
-    state.targetWeek.dates.forEach((date) => {
-      const dateKey = formatDateKey(date);
-      const key = `${dateKey}_${shift.key}`;
-      const assignment = assignmentMap[key];
-
-      if (editable) {
-        html += `
-          <td>
-            <input
-              class="assignment-input"
-              type="text"
-              data-date-key="${dateKey}"
-              data-shift-type="${shift.key}"
-              value="${escapeHtml(assignment?.assignedDisplayName || "")}"
-              placeholder="未設定"
-              maxlength="20"
-            />
-          </td>
-        `;
-      } else {
-        html += `
-          <td>
-            ${
-              assignment?.assignedDisplayName
-                ? `<span class="final-name">${escapeHtml(assignment.assignedDisplayName)}</span>`
-                : `<span class="empty-text">未定</span>`
-            }
-          </td>
-        `;
-      }
-    });
-
-    html += `</tr>`;
-  });
-
-  html += `</tbody></table>`;
-  mountEl.innerHTML = html;
-}
-
-function renderStaffApplyCards() {
-  const myApps = state.applications.filter((app) => app.userId === state.currentUser.uid);
-  const myAppMap = {};
-  myApps.forEach((app) => {
-    myAppMap[`${app.dateKey}_${app.shiftType}`] = app;
-  });
-
-  els.staffSubmissionCount.textContent = `提出 ${myApps.length}件`;
-
-  let html = "";
-
-  state.targetWeek.dates.forEach((date, index) => {
-    const dateKey = formatDateKey(date);
-
-    html += `
-      <article class="day-card">
-        <div class="day-card-head">
-          <h3>${formatMonthDay(date)}(${WEEKDAY_LABELS[index]})</h3>
-          <span>提出操作</span>
-        </div>
-    `;
-
-    SHIFT_TYPES.forEach((shift) => {
-      const currentApp = myAppMap[`${dateKey}_${shift.key}`];
-      const isApplied = !!currentApp;
-
-      html += `
-        <div class="shift-row">
-          <div class="shift-meta">
-            <span class="shift-label">${shift.label}</span>
-            <span class="shift-caption">${isApplied ? "タップで取り消し" : "応募する"}</span>
-          </div>
-          <button
-            class="apply-btn ${isApplied ? "applied" : ""}"
-            data-date-key="${dateKey}"
-            data-day-index="${index}"
-            data-shift-type="${shift.key}"
-            data-application-id="${currentApp?.id || ""}"
-            type="button"
-          >
-            ${isApplied ? "応募済み" : "＋"}
-          </button>
-        </div>
-      `;
-    });
-
-    html += `</article>`;
-  });
-
-  els.staffApplyList.innerHTML = html;
-}
-
-async function toggleApplication({ dateKey, dayIndex, shiftType, applicationId }) {
-  if (!state.currentUser || !state.profile) return;
-
-  try {
-    if (applicationId) {
-      await db.collection("applications").doc(applicationId).delete();
-      showToast("応募を取り消しました");
-    } else {
-      await db.collection("applications").add({
-        weekKey: state.targetWeek.weekKey,
-        dateKey,
-        dayIndex: Number(dayIndex),
-        shiftType,
-        userId: state.currentUser.uid,
-        displayName: state.profile.displayName,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      showToast("応募しました");
-    }
-
-    await refreshForCurrentRole();
-  } catch (error) {
-    console.error(error);
-    showToast("応募の保存に失敗しました");
-  }
-}
-
-async function loadStaffScreen() {
-  await loadWeekData();
-
-  els.staffHeaderMeta.textContent = `${state.profile.displayName} さん / 対象週 ${state.targetWeek.label}`;
-  els.staffFinalWeekLabel.textContent = `確定版 ${state.targetWeek.label}`;
-  els.staffApplyWeekLabel.textContent = `提出対象 ${state.targetWeek.label}`;
-
-  renderScheduleTable({ editable: false, mountEl: els.staffFinalTable });
-  renderStaffApplyCards();
-
-  showOnlyScreen(els.staffScreen);
-}
-
-// ================================
-// 管理者画面
-// ================================
-function renderRecruitingOverview() {
-  const submittedUserIds = [...new Set(state.applications.map((app) => app.userId))];
-  const approvedUsers = state.approvedUsers;
-  const submittedUsers = approvedUsers.filter((user) => submittedUserIds.includes(user.uid || user.id));
-  const notSubmittedUsers = approvedUsers.filter((user) => !submittedUserIds.includes(user.uid || user.id));
-
-  els.approvedCount.textContent = String(approvedUsers.length);
-  els.submittedCount.textContent = String(submittedUsers.length);
-  els.notSubmittedCount.textContent = String(notSubmittedUsers.length);
-  els.applicationCount.textContent = String(state.applications.length);
-
-  els.submittedUserList.innerHTML = submittedUsers.length
-    ? submittedUsers.map((user) => `<span class="chip submitted">${escapeHtml(user.displayName)}</span>`).join("")
-    : `<span class="chip">まだなし</span>`;
-
-  els.notSubmittedUserList.innerHTML = notSubmittedUsers.length
-    ? notSubmittedUsers.map((user) => `<span class="chip missing">${escapeHtml(user.displayName)}</span>`).join("")
-    : `<span class="chip submitted">全員提出済み</span>`;
-}
-
-function renderRecruitingList() {
-  const appMap = getApplicationsMap(state.applications);
-
-  let html = "";
-
-  state.targetWeek.dates.forEach((date, index) => {
-    const dateKey = formatDateKey(date);
-
-    html += `
-      <article class="recruit-day-card">
-        <div class="recruit-day-head">
-          ${formatMonthDay(date)}(${WEEKDAY_LABELS[index]})
-        </div>
-        <div class="recruit-day-body">
-    `;
-
-    SHIFT_TYPES.forEach((shift) => {
-      const apps = appMap[`${dateKey}_${shift.key}`] || [];
-      html += `
-        <div class="shift-applicants">
-          <div class="shift-applicants-head">
-            <span>${shift.label}</span>
-            <span>${apps.length}名</span>
-          </div>
-          <div class="chip-list">
-            ${
-              apps.length
-                ? apps.map((app) => `<span class="chip">${escapeHtml(app.displayName)}</span>`).join("")
-                : `<span class="chip">応募なし</span>`
-            }
-          </div>
-        </div>
-      `;
-    });
-
-    html += `
-        </div>
-      </article>
-    `;
-  });
-
-  els.managerRecruitingList.innerHTML = html;
-}
-
-function renderPendingUsers() {
-  if (!state.pendingUsers.length) {
-    els.pendingUserList.innerHTML = `
-      <div class="pending-user-card">
-        <div class="pending-user-meta">
-          <strong>承認待ちユーザーはいません</strong>
-        </div>
-      </div>
-    `;
+async function handleAuthStateChanged(user) {
+  if (!user) {
+    state.currentUser = null;
+    state.currentProfile = null;
+    showScreen("auth");
     return;
   }
 
-  els.pendingUserList.innerHTML = state.pendingUsers.map((user) => `
-    <article class="pending-user-card">
-      <div class="pending-user-meta">
-        <strong>${escapeHtml(user.displayName || "未設定")}</strong>
-        <span>${escapeHtml(user.email || "")}</span>
-      </div>
-      <div class="pending-actions">
-        <button class="primary-btn approve-user-btn" data-user-id="${user.uid || user.id}" type="button">承認</button>
-      </div>
-    </article>
-  `).join("");
-}
-
-async function approveUser(userId) {
   try {
-    await db.collection("staffs").doc(userId).update({
-      status: "approved"
-    });
-    showToast("承認しました");
-    await refreshForCurrentRole();
-  } catch (error) {
-    console.error(error);
-    showToast("承認に失敗しました");
-  }
-}
+    state.currentUser = user;
+    state.weekInfo = buildWeekInfo();
 
-function pickFairRandomCandidate(candidates, counts, excludedUserIds = new Set()) {
-  const filtered = candidates.filter((candidate) => !excludedUserIds.has(candidate.userId));
-  if (!filtered.length) return null;
+    const profile = await ensureUserProfile(user);
+    state.currentProfile = profile;
 
-  const minCount = Math.min(...filtered.map((candidate) => counts[candidate.userId] || 0));
-  const leastAssigned = filtered.filter((candidate) => (counts[candidate.userId] || 0) === minCount);
-  const randomIndex = Math.floor(Math.random() * leastAssigned.length);
-  return leastAssigned[randomIndex];
-}
-
-function chooseAssignmentsForDay(dateKey, counts, appMap) {
-  const selected = {
-    early: null,
-    late: null
-  };
-
-  const earlyCandidates = appMap[`${dateKey}_early`] || [];
-  const lateCandidates = appMap[`${dateKey}_late`] || [];
-
-  const order = [
-    { key: "early", candidates: earlyCandidates },
-    { key: "late", candidates: lateCandidates }
-  ].sort((a, b) => a.candidates.length - b.candidates.length);
-
-  const usedUserIds = new Set();
-
-  order.forEach((item) => {
-    const picked = pickFairRandomCandidate(item.candidates, counts, usedUserIds);
-    if (!picked) {
-      selected[item.key] = null;
+    if (profile.status === "disabled") {
+      showToast("このアカウントは停止中です");
+      await auth.signOut();
       return;
     }
 
-    selected[item.key] = picked;
-    usedUserIds.add(picked.userId);
-    counts[picked.userId] = (counts[picked.userId] || 0) + 1;
-  });
+    if (profile.status !== "approved") {
+      renderPendingScreen(profile);
+      showScreen("pending");
+      return;
+    }
 
-  return selected;
+    const mode = sessionStorage.getItem("loginMode") || "staff";
+    await enterMode(mode);
+  } catch (error) {
+    console.error(error);
+    showToast("ログイン後の初期化に失敗しました");
+    showScreen("auth");
+  }
 }
 
-async function generateSchedule() {
-  if (!confirm("現在の応募状況から確定版を作成します。上書きしますか？")) {
+async function ensureUserProfile(user) {
+  const ref = db.collection(COLLECTIONS.staffs).doc(user.uid);
+  const snap = await ref.get();
+
+  const fallbackDisplayName =
+    user.displayName?.trim() ||
+    (user.email ? user.email.split("@")[0] : "ユーザー");
+
+  if (!snap.exists) {
+    const newProfile = {
+      uid: user.uid,
+      email: user.email || "",
+      displayName: fallbackDisplayName,
+      status: "pending",
+      role: "staff",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    await ref.set(newProfile, { merge: true });
+    return newProfile;
+  }
+
+  const data = snap.data();
+  const merged = {
+    uid: user.uid,
+    email: data.email || user.email || "",
+    displayName: data.displayName || fallbackDisplayName,
+    status: data.status || "pending",
+    role: data.role || "staff"
+  };
+
+  if (!data.displayName || !data.email || !data.uid || !data.role || !data.status) {
+    await ref.set(merged, { merge: true });
+  }
+
+  return merged;
+}
+
+// =====================
+// 画面遷移
+// =====================
+async function enterMode(mode) {
+  state.currentMode = mode;
+  sessionStorage.setItem("loginMode", mode);
+
+  if (mode === "staff") {
+    await loadStaffScreen();
+    showScreen("staff");
     return;
   }
 
-  try {
-    await loadWeekData();
+  if (mode === "manager") {
+    await loadManagerScreen();
+    showScreen("manager");
+    return;
+  }
 
-    const appMap = getApplicationsMap(state.applications);
-    const counts = {};
-    const batch = db.batch();
-
-    state.targetWeek.dates.forEach((date, index) => {
-      const dateKey = formatDateKey(date);
-      const picked = chooseAssignmentsForDay(dateKey, counts, appMap);
-
-      SHIFT_TYPES.forEach((shift) => {
-        const docRef = db.collection("assignments").doc(
-          getCellDocId(state.targetWeek.weekKey, dateKey, shift.key)
-        );
-
-        const winner = picked[shift.key];
-        if (winner) {
-          batch.set(docRef, {
-            weekKey: state.targetWeek.weekKey,
-            dateKey,
-            dayIndex: index,
-            shiftType: shift.key,
-            assignedUserId: winner.userId,
-            assignedDisplayName: winner.displayName,
-            generatedBy: state.currentUser.uid,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            manual: false
-          });
-        } else {
-          batch.delete(docRef);
-        }
-      });
-    });
-
-    await batch.commit();
-    showToast("シフトを自動作成しました");
-    await refreshForCurrentRole();
-  } catch (error) {
-    console.error(error);
-    showToast("自動作成に失敗しました");
+  if (mode === "operator") {
+    if (state.currentProfile.role !== "operator") {
+      showToast("運営者権限がありません。スタッフ画面を開きます");
+      sessionStorage.setItem("loginMode", "staff");
+      await loadStaffScreen();
+      showScreen("staff");
+      return;
+    }
+    await loadOperatorScreen();
+    showScreen("operator");
   }
 }
 
-async function saveManualAssignments() {
-  try {
-    const inputs = [...document.querySelectorAll(".assignment-input")];
-    const batch = db.batch();
+function showScreen(type) {
+  const map = {
+    auth: el.authScreen,
+    pending: el.pendingScreen,
+    staff: el.staffScreen,
+    manager: el.managerScreen,
+    operator: el.operatorScreen
+  };
 
-    inputs.forEach((input) => {
-      const dateKey = input.dataset.dateKey;
-      const shiftType = input.dataset.shiftType;
-      const value = normalizeName(input.value);
-      const docRef = db.collection("assignments").doc(
-        getCellDocId(state.targetWeek.weekKey, dateKey, shiftType)
-      );
+  Object.values(map).forEach((screen) => screen.classList.add("hidden"));
+  map[type].classList.remove("hidden");
+}
 
-      if (!value) {
-        batch.delete(docRef);
-      } else {
-        batch.set(docRef, {
-          weekKey: state.targetWeek.weekKey,
-          dateKey,
-          shiftType,
-          assignedUserId: null,
-          assignedDisplayName: value,
-          generatedBy: state.currentUser.uid,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          manual: true
-        });
-      }
-    });
+function renderPendingScreen(profile) {
+  el.pendingDisplayName.textContent = profile.displayName || "-";
+  el.pendingEmail.textContent = profile.email || "-";
+  el.pendingStatus.textContent = profile.status || "pending";
+}
 
-    await batch.commit();
-    showToast("確定版を保存しました");
-    await refreshForCurrentRole();
-  } catch (error) {
-    console.error(error);
-    showToast("確定版の保存に失敗しました");
+function handleTabClick(event) {
+  const button = event.currentTarget;
+  const group = button.dataset.tabGroup;
+  const target = button.dataset.tabTarget;
+
+  document.querySelectorAll(`[data-tab-group="${group}"]`).forEach((tab) => {
+    tab.classList.remove("active");
+  });
+  button.classList.add("active");
+
+  if (group === "staff") {
+    togglePanels(["staff-final-panel", "staff-apply-panel"], target);
+  }
+  if (group === "manager") {
+    togglePanels(["manager-recruiting-panel", "manager-final-panel"], target);
+  }
+  if (group === "operator") {
+    togglePanels(["operator-recruiting-panel", "operator-final-panel", "operator-account-panel"], target);
   }
 }
 
-async function loadManagerScreen() {
-  await Promise.all([
-    loadWeekData(),
-    loadApprovedUsers(),
-    loadPendingUsers()
+function togglePanels(panelIds, activeId) {
+  panelIds.forEach((id) => {
+    const node = document.getElementById(id);
+    node.classList.toggle("hidden", id !== activeId);
+  });
+}
+
+// =====================
+// 日付
+// =====================
+function buildWeekInfo() {
+  const monday = getNextWeekMonday();
+  const dates = [];
+
+  for (let i = 0; i < 6; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    dates.push(date);
+  }
+
+  return {
+    key: formatDateKey(monday),
+    monday,
+    dates,
+    label: `${formatMonthDay(dates[0])}(${DAY_NAMES[0]})〜${formatMonthDay(dates[5])}(${DAY_NAMES[5]})`
+  };
+}
+
+function getNextWeekMonday() {
+  const now = new Date();
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = base.getDay();
+  const diff = day === 0 ? 1 : 8 - day;
+  base.setDate(base.getDate() + diff);
+  return base;
+}
+
+function formatDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatMonthDay(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+// =====================
+// データ取得
+// =====================
+async function fetchWeekApplications(weekKey) {
+  const snap = await db.collection(COLLECTIONS.applications)
+    .where("weekKey", "==", weekKey)
+    .get();
+
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function fetchWeekAssignments(weekKey) {
+  const snap = await db.collection(COLLECTIONS.assignments)
+    .where("weekKey", "==", weekKey)
+    .get();
+
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function fetchApprovedUsers() {
+  const snap = await db.collection(COLLECTIONS.staffs)
+    .where("status", "==", "approved")
+    .get();
+
+  const users = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  users.sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "ja"));
+  return users;
+}
+
+async function fetchAllAccounts() {
+  const snap = await db.collection(COLLECTIONS.staffs).get();
+  const accounts = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  accounts.sort((a, b) => {
+    const orderA = accountStatusOrder(a.status);
+    const orderB = accountStatusOrder(b.status);
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.displayName || "").localeCompare(b.displayName || "", "ja");
+  });
+  return accounts;
+}
+
+function accountStatusOrder(status) {
+  if (status === "pending") return 0;
+  if (status === "approved") return 1;
+  return 2;
+}
+
+// =====================
+// スタッフ画面
+// =====================
+async function loadStaffScreen() {
+  const weekKey = state.weekInfo.key;
+  const [applications, assignments] = await Promise.all([
+    fetchWeekApplications(weekKey),
+    fetchWeekAssignments(weekKey)
   ]);
 
-  els.managerHeaderMeta.textContent = `${state.profile.displayName} さん / 募集対象 ${state.targetWeek.label}`;
-  els.managerRecruitingWeekLabel.textContent = `募集中 ${state.targetWeek.label}`;
-  els.managerFinalWeekLabel.textContent = `確定版 ${state.targetWeek.label}`;
-
-  renderRecruitingOverview();
-  renderRecruitingList();
-  renderScheduleTable({ editable: true, mountEl: els.managerFinalTable });
-  renderPendingUsers();
-
-  showOnlyScreen(els.managerScreen);
+  el.staffWeekLabel.textContent = `対象週 ${state.weekInfo.label}`;
+  renderReadonlySchedule(el.staffFinalTable, assignments);
+  renderStaffApplyList(applications);
 }
 
-// ================================
-// 画面分岐
-// ================================
-async function refreshForCurrentRole() {
-  state.targetWeek = getNextWeekInfo();
+function renderStaffApplyList(applications) {
+  const myUid = state.currentUser.uid;
 
-  if (!state.currentUser) {
-    showOnlyScreen(els.authScreen);
-    return;
-  }
-
-  state.profile = await ensureStaffProfile(state.currentUser);
-
-  if (state.profile.status !== "approved") {
-    els.pendingUserText.textContent = `${state.profile.displayName || state.currentUser.email} / 承認待ち`;
-    showOnlyScreen(els.pendingScreen);
-    return;
-  }
-
-  if (state.profile.role === "manager") {
-    await loadManagerScreen();
-  } else {
-    await loadStaffScreen();
-  }
+  el.staffApplyList.innerHTML = state.weekInfo.dates.map((date, dayIndex) => {
+    return `
+      <article class="day-card">
+        <h3>${formatMonthDay(date)}（${DAY_NAMES[dayIndex]}）</h3>
+        ${renderApplyRow("early", dayIndex, applications, myUid)}
+        ${renderApplyRow("late", dayIndex, applications, myUid)}
+      </article>
+    `;
+  }).join("");
 }
 
-// ================================
-// イベント
-// ================================
-els.showLoginTabBtn.addEventListener("click", () => {
-  els.showLoginTabBtn.classList.add("active");
-  els.showRegisterTabBtn.classList.remove("active");
-  els.loginTab.classList.remove("hidden");
-  els.registerTab.classList.add("hidden");
-});
+function renderApplyRow(shiftType, dayIndex, applications, myUid) {
+  const docId = buildApplicationId(state.weekInfo.key, dayIndex, shiftType, myUid);
+  const exists = applications.some((app) => app.id === docId);
+  const applicantCount = applications.filter((app) =>
+    app.dayIndex === dayIndex && app.shiftType === shiftType
+  ).length;
 
-els.showRegisterTabBtn.addEventListener("click", () => {
-  els.showRegisterTabBtn.classList.add("active");
-  els.showLoginTabBtn.classList.remove("active");
-  els.registerTab.classList.remove("hidden");
-  els.loginTab.classList.add("hidden");
-});
+  return `
+    <div class="shift-line">
+      <div>
+        <div class="shift-name">${SHIFT_LABELS[shiftType]}</div>
+        <div class="muted">応募者 ${applicantCount}人</div>
+      </div>
+      <div class="shift-meta">
+        <button
+          class="apply-button ${exists ? "is-applied" : ""}"
+          type="button"
+          data-apply-day="${dayIndex}"
+          data-apply-shift="${shiftType}"
+        >
+          ${exists ? "応募済み" : "応募する"}
+        </button>
+      </div>
+    </div>
+  `;
+}
 
-els.loginForm.addEventListener("submit", loginUser);
-els.registerForm.addEventListener("submit", registerUser);
+async function handleApplyButtonClick(event) {
+  const button = event.target.closest("[data-apply-day]");
+  if (!button) return;
 
-els.pendingLogoutBtn.addEventListener("click", logoutUser);
-els.staffLogoutBtn.addEventListener("click", logoutUser);
-els.managerLogoutBtn.addEventListener("click", logoutUser);
+  const dayIndex = Number(button.dataset.applyDay);
+  const shiftType = button.dataset.applyShift;
+  const weekKey = state.weekInfo.key;
+  const user = state.currentUser;
 
-document.querySelectorAll(".staff-tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    switchTab(
-      document.querySelectorAll(".staff-tab-btn"),
-      document.querySelectorAll("#staff-screen .panel-section"),
-      btn.dataset.target
-    );
-  });
-});
-
-document.querySelectorAll(".manager-tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    switchTab(
-      document.querySelectorAll(".manager-tab-btn"),
-      document.querySelectorAll("#manager-screen .panel-section"),
-      btn.dataset.target
-    );
-  });
-});
-
-els.staffApplyList.addEventListener("click", async (event) => {
-  const btn = event.target.closest(".apply-btn");
-  if (!btn) return;
-
-  await toggleApplication({
-    dateKey: btn.dataset.dateKey,
-    dayIndex: btn.dataset.dayIndex,
-    shiftType: btn.dataset.shiftType,
-    applicationId: btn.dataset.applicationId || ""
-  });
-});
-
-els.pendingUserList.addEventListener("click", async (event) => {
-  const btn = event.target.closest(".approve-user-btn");
-  if (!btn) return;
-
-  await approveUser(btn.dataset.userId);
-});
-
-els.generateScheduleBtn.addEventListener("click", generateSchedule);
-els.saveFinalBtn.addEventListener("click", saveManualAssignments);
-
-// ================================
-// Auth 監視
-// ================================
-auth.onAuthStateChanged(async (user) => {
-  state.currentUser = user;
+  const docId = buildApplicationId(weekKey, dayIndex, shiftType, user.uid);
+  const ref = db.collection(COLLECTIONS.applications).doc(docId);
+  const snap = await ref.get();
 
   try {
-    await refreshForCurrentRole();
-  } catch (error) {
-    console.error(error);
-    showToast("画面の読み込みに失敗しました");
-    showOnlyScreen(els.authScreen);
-  }
-});
+    if (snap.exists) {
+      await ref.delete();
+      showToast("応募を取り消しました");
+    } else {
+      await ref.set({
+        weekKey,
+        dayIndex,
+        shiftType,
+        userId: user.uid,
+        displayName: state.currentProfile.displayName,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
