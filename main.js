@@ -79,6 +79,14 @@ const el = {
   staffFinalTable: document.getElementById("staff-final-table"),
   staffApplyList: document.getElementById("staff-apply-list"),
 
+  staffAccountDisplayName: document.getElementById("staff-account-display-name"),
+  staffAccountEmail: document.getElementById("staff-account-email"),
+  openWithdrawBtn: document.getElementById("open-withdraw-btn"),
+  withdrawConfirmBox: document.getElementById("withdraw-confirm-box"),
+  withdrawPassword: document.getElementById("withdraw-password"),
+  confirmWithdrawBtn: document.getElementById("confirm-withdraw-btn"),
+  cancelWithdrawBtn: document.getElementById("cancel-withdraw-btn"),
+
   managerWeekLabel: document.getElementById("manager-week-label"),
   managerSummary: document.getElementById("manager-summary"),
   managerRecruitingList: document.getElementById("manager-recruiting-list"),
@@ -122,6 +130,11 @@ function bindEvents() {
   });
 
   el.staffApplyList?.addEventListener("click", handleApplyButtonClick);
+
+  el.openWithdrawBtn?.addEventListener("click", openWithdrawConfirm);
+  el.cancelWithdrawBtn?.addEventListener("click", closeWithdrawConfirm);
+  el.confirmWithdrawBtn?.addEventListener("click", withdrawOwnAccount);
+
   el.generateScheduleBtn?.addEventListener("click", generateSchedule);
   el.saveFinalEditBtn?.addEventListener("click", saveManualAssignments);
   el.operatorAccountList?.addEventListener("click", handleOperatorActionClick);
@@ -516,6 +529,10 @@ async function loadStaffScreen() {
   await loadCommonWeekData();
 
   el.staffWeekLabel.textContent = `対象週 ${state.weekInfo.label}`;
+  el.staffAccountDisplayName.textContent = state.currentProfile?.displayName || "-";
+  el.staffAccountEmail.textContent = state.currentProfile?.email || "-";
+  closeWithdrawConfirm();
+
   renderReadonlySchedule(el.staffFinalTable, state.assignments);
   renderStaffApplyList(state.applications);
 }
@@ -1035,4 +1052,100 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function openWithdrawConfirm() {
+  el.withdrawConfirmBox?.classList.remove("hidden");
+  if (el.withdrawPassword) {
+    el.withdrawPassword.value = "";
+    el.withdrawPassword.focus();
+  }
+}
+
+function closeWithdrawConfirm() {
+  el.withdrawConfirmBox?.classList.add("hidden");
+  if (el.withdrawPassword) {
+    el.withdrawPassword.value = "";
+  }
+}
+
+async function withdrawOwnAccount() {
+  const user = auth.currentUser;
+  const password = el.withdrawPassword?.value || "";
+
+  if (!user) {
+    showToast("ログイン状態を確認できませんでした");
+    return;
+  }
+
+  if (!user.email) {
+    showToast("メールアドレスを確認できませんでした");
+    return;
+  }
+
+  if (!password.trim()) {
+    showToast("パスワードを入力してください");
+    return;
+  }
+
+  try {
+    showToast("退会処理を開始します");
+
+    // 1. 再認証
+    const credential = firebase.auth.EmailAuthProvider.credential(
+      user.email,
+      password
+    );
+    await user.reauthenticateWithCredential(credential);
+
+    // 2. applications から本人の応募データを削除
+    const applicationsSnap = await db
+      .collection(COLLECTIONS.applications)
+      .where("userId", "==", user.uid)
+      .get();
+
+    const applicationDocs = applicationsSnap.docs;
+    const batchSize = 400;
+
+    for (let i = 0; i < applicationDocs.length; i += batchSize) {
+      const batch = db.batch();
+      const chunk = applicationDocs.slice(i, i + batchSize);
+
+      chunk.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+    }
+
+    // 3. staffs から本人データを削除
+    await db.collection(COLLECTIONS.staffs).doc(user.uid).delete();
+
+    // 4. Authentication から本人アカウントを削除
+    await user.delete();
+
+    // 5. 後処理
+    closeWithdrawConfirm();
+    sessionStorage.removeItem("loginMode");
+    showToast("退会が完了しました");
+  } catch (error) {
+    console.error(error);
+
+    if (error.code === "auth/wrong-password") {
+      showToast("パスワードが正しくありません");
+      return;
+    }
+
+    if (error.code === "auth/too-many-requests") {
+      showToast("試行回数が多すぎます。少し時間をおいてください");
+      return;
+    }
+
+    if (error.code === "auth/requires-recent-login") {
+      showToast("もう一度ログインしてから退会してください");
+      return;
+    }
+
+    showToast("退会処理に失敗しました");
+  }
 }

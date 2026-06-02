@@ -105,6 +105,54 @@
           <div id="staff-apply-list" class="day-card-list"></div>
         </div>
       </div>
+      <div id="staff-account-panel" class="panel">
+  <div class="card">
+    <div class="card-head">
+      <h2>アカウント設定</h2>
+      <span class="badge readonly">本人操作</span>
+    </div>
+
+    <div class="pending-info">
+      <div>
+        <span>表示名</span>
+        <strong id="staff-account-display-name">-</strong>
+      </div>
+      <div>
+        <span>メール</span>
+        <strong id="staff-account-email">-</strong>
+      </div>
+    </div>
+
+    <p class="muted">
+      退会すると、このサイトにログインできなくなります。<br>
+      未確定の応募データとスタッフ情報は削除されます。<br>
+      確定済みシフトは履歴として残る場合があります。
+    </p>
+
+    <button id="open-withdraw-btn" class="ghost-button full" type="button">
+      退会する
+    </button>
+
+    <div id="withdraw-confirm-box" class="hidden" style="margin-top: 12px;">
+      <label class="field-label">パスワード再入力</label>
+      <input
+        id="withdraw-password"
+        class="input"
+        type="password"
+        placeholder="現在のパスワード"
+      />
+
+      <div style="display: grid; gap: 8px; margin-top: 12px;">
+        <button id="confirm-withdraw-btn" class="primary-button full" type="button">
+          退会を確定する
+        </button>
+        <button id="cancel-withdraw-btn" class="ghost-button full" type="button">
+          キャンセル
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
     </section>
 
     <!-- 管理者画面 -->

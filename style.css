@@ -534,3 +534,51 @@ input {
     grid-template-columns: repeat(4, 1fr);
   }
 }
+#staff-account-panel {
+  margin-top: 14px;
+}
+
+#staff-account-panel .card {
+  border: 1px solid var(--line);
+}
+
+#staff-account-panel .muted {
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+
+#open-withdraw-btn {
+  margin-top: 14px;
+}
+
+#withdraw-confirm-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+#withdraw-confirm-box .field-label {
+  margin-top: 0;
+}
+
+#withdraw-password {
+  margin-top: 6px;
+}
+
+#confirm-withdraw-btn {
+  background: #8b3a3a;
+  color: #ffffff;
+}
+
+#confirm-withdraw-btn:hover {
+  opacity: 0.92;
+}
+
+#cancel-withdraw-btn {
+  background: var(--surface-2);
+}
+
+#staff-account-display-name,
+#staff-account-email {
+  word-break: break-all;
+}
