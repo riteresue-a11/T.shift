@@ -3,30 +3,251 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>シフト管理サイト</title>
+  <title>シフト管理</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="container">
-    <header class="header">
-      <h1>シフト管理サイト</h1>
-      <p>まずは土台だけ作成</p>
-    </header>
+  <div id="toast" class="toast hidden"></div>
 
-    <main class="main">
-      <section class="card">
-        <h2>ログイン画面（仮）</h2>
-        <input type="email" placeholder="メールアドレス" />
-        <input type="password" placeholder="パスワード" />
-        <button id="login-btn">ログイン</button>
+  <!-- 認証画面 -->
+  <section id="auth-screen" class="screen">
+    <div class="auth-shell">
+      <div class="brand-block">
+        <h1>シフト管理</h1>
+        <p>スタッフ提出 / 管理者確定</p>
+      </div>
+
+      <div class="card auth-card">
+        <div class="segmented">
+          <button id="show-login-tab" class="seg-btn active" type="button">ログイン</button>
+          <button id="show-register-tab" class="seg-btn" type="button">新規登録</button>
+        </div>
+
+        <div id="login-tab" class="auth-tab active">
+          <h2>ログイン</h2>
+          <form id="login-form" class="form-stack">
+            <label>
+              <span>メールアドレス</span>
+              <input id="login-email" type="email" placeholder="example@email.com" required />
+            </label>
+            <label>
+              <span>パスワード</span>
+              <input id="login-password" type="password" placeholder="6文字以上" required />
+            </label>
+            <button class="primary-btn" type="submit">ログイン</button>
+          </form>
+        </div>
+
+        <div id="register-tab" class="auth-tab hidden">
+          <h2>新規登録</h2>
+          <form id="register-form" class="form-stack">
+            <label>
+              <span>メールアドレス</span>
+              <input id="register-email" type="email" placeholder="example@email.com" required />
+            </label>
+            <label>
+              <span>パスワード</span>
+              <input id="register-password" type="password" placeholder="6文字以上" required />
+            </label>
+            <label>
+              <span>パスワード確認</span>
+              <input id="register-password-confirm" type="password" placeholder="もう一度入力" required />
+            </label>
+            <label>
+              <span>サイト内表示名（名字）</span>
+              <input id="register-display-name" type="text" placeholder="例：金城" maxlength="20" required />
+            </label>
+            <button class="primary-btn" type="submit">登録する</button>
+          </form>
+          <p class="help-text">
+            登録後は管理者の承認待ちになります。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 承認待ち -->
+  <section id="pending-screen" class="screen hidden">
+    <div class="app-shell narrow">
+      <div class="app-header single">
+        <div>
+          <h1>承認待ち</h1>
+          <p id="pending-user-text" class="subtle-text"></p>
+        </div>
+        <button id="pending-logout-btn" class="ghost-btn" type="button">ログアウト</button>
+      </div>
+
+      <div class="card">
+        <h2>管理者の承認待ちです</h2>
+        <p class="body-text">
+          承認が完了すると、シフト提出画面が利用できるようになります。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- スタッフ画面 -->
+  <section id="staff-screen" class="screen hidden">
+    <div class="app-shell">
+      <div class="app-header">
+        <div>
+          <h1>スタッフ画面</h1>
+          <p id="staff-header-meta" class="subtle-text"></p>
+        </div>
+        <button id="staff-logout-btn" class="ghost-btn" type="button">ログアウト</button>
+      </div>
+
+      <nav class="segmented compact">
+        <button class="seg-btn active staff-tab-btn" data-target="staff-final-panel" type="button">確定版</button>
+        <button class="seg-btn staff-tab-btn" data-target="staff-apply-panel" type="button">シフト提出</button>
+      </nav>
+
+      <section id="staff-final-panel" class="panel-section">
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>確定版シフト</h2>
+              <p id="staff-final-week-label" class="subtle-text"></p>
+            </div>
+            <span class="badge">閲覧専用</span>
+          </div>
+          <div class="table-wrap">
+            <div id="staff-final-table"></div>
+          </div>
+        </div>
       </section>
 
-      <section class="card">
-        <h2>ここにスタッフ画面や管理者画面を追加予定</h2>
-        <p>今はまだ空の状態です。</p>
+      <section id="staff-apply-panel" class="panel-section hidden">
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>シフト提出</h2>
+              <p id="staff-apply-week-label" class="subtle-text"></p>
+            </div>
+            <span id="staff-submission-count" class="badge soft">提出 0件</span>
+          </div>
+          <div id="staff-apply-list" class="day-card-list"></div>
+        </div>
       </section>
-    </main>
-  </div>
+    </div>
+  </section>
+
+  <!-- 管理者画面 -->
+  <section id="manager-screen" class="screen hidden">
+    <div class="app-shell">
+      <div class="app-header">
+        <div>
+          <h1>管理者画面</h1>
+          <p id="manager-header-meta" class="subtle-text"></p>
+        </div>
+        <button id="manager-logout-btn" class="ghost-btn" type="button">ログアウト</button>
+      </div>
+
+      <nav class="segmented compact">
+        <button class="seg-btn active manager-tab-btn" data-target="manager-recruiting-panel" type="button">募集中シフト</button>
+        <button class="seg-btn manager-tab-btn" data-target="manager-final-panel" type="button">確定版</button>
+        <button class="seg-btn manager-tab-btn" data-target="manager-approval-panel" type="button">承認待ち</button>
+      </nav>
+
+      <section id="manager-recruiting-panel" class="panel-section">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>承認済み</span>
+            <strong id="approved-count">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>提出済み</span>
+            <strong id="submitted-count">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>未提出</span>
+            <strong id="not-submitted-count">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>応募総数</span>
+            <strong id="application-count">0</strong>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>セル別応募者</h2>
+              <p id="manager-recruiting-week-label" class="subtle-text"></p>
+            </div>
+          </div>
+          <div id="manager-recruiting-list" class="recruiting-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>提出状況</h2>
+              <p class="subtle-text">提出済み / 未提出</p>
+            </div>
+          </div>
+          <div class="dual-column">
+            <div>
+              <h3 class="mini-heading">提出済み</h3>
+              <div id="submitted-user-list" class="chip-list"></div>
+            </div>
+            <div>
+              <h3 class="mini-heading">未提出</h3>
+              <div id="not-submitted-user-list" class="chip-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>自動作成</h2>
+              <p class="subtle-text">同じ日の早番・遅番に同一人物は入りません</p>
+            </div>
+          </div>
+          <button id="generate-schedule-btn" class="primary-btn" type="button">シフト作成</button>
+        </div>
+      </section>
+
+      <section id="manager-final-panel" class="panel-section hidden">
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>確定版シフト</h2>
+              <p id="manager-final-week-label" class="subtle-text"></p>
+            </div>
+            <span class="badge">管理者編集</span>
+          </div>
+
+          <div class="table-wrap">
+            <div id="manager-final-table"></div>
+          </div>
+
+          <div class="sticky-actions">
+            <button id="save-final-btn" class="primary-btn" type="button">確定版を保存</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="manager-approval-panel" class="panel-section hidden">
+        <div class="card">
+          <div class="panel-head">
+            <div>
+              <h2>承認待ちユーザー</h2>
+              <p class="subtle-text">承認後にスタッフ画面が使えるようになります</p>
+            </div>
+          </div>
+          <div id="pending-user-list" class="pending-user-list"></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- Firebase CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script src="main.js"></script>
 </body>
