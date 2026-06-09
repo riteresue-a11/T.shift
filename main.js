@@ -22,8 +22,10 @@ const db = firebase.firestore();
 const COLLECTIONS = {
   staffs: "staffs",
   applications: "applications",
-  assignments: "assignments"
+  assignments: "assignments",
+  systemMeta: "system_meta",
 };
+
 
 const DAY_NAMES = ["月", "火", "水", "木", "金", "土"];
 const SHIFT_TYPES = ["early", "late"];
@@ -264,6 +266,70 @@ function buildAssignmentId(weekKey, dayIndex, shiftType) {
   return `${weekKey}_${dayIndex}_${shiftType}`;
 }
 
+async function runWeeklyCleanupIfNeeded() {
+  if (!state.weekInfo?.key) return;
+
+  const cleanupRef = db.collection(COLLECTIONS.systemMeta).doc("cleanup");
+  const cleanupSnap = await cleanupRef.get();
+
+  const currentWeekKey = state.weekInfo.key;
+  const previousWeekKey = getPreviousWeekKey(currentWeekKey);
+
+  const lastCleanupWeekKey = cleanupSnap.exists
+    ? cleanupSnap.data().lastCleanupWeekKey
+    : null;
+
+  if (lastCleanupWeekKey === currentWeekKey) {
+    return;
+  }
+
+  await deleteOldWeekDocs(COLLECTIONS.applications, currentWeekKey);
+  await deleteOldWeekDocs(COLLECTIONS.assignments, previousWeekKey);
+
+  await cleanupRef.set(
+    {
+      lastCleanupWeekKey: currentWeekKey,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
+}
+
+async function deleteOldWeekDocs(collectionName, cutoffWeekKey) {
+  const batchSize = 400;
+
+  while (true) {
+    const snap = await db
+      .collection(collectionName)
+      .where("weekKey", "<", cutoffWeekKey)
+      .limit(batchSize)
+      .get();
+
+    if (snap.empty) {
+      break;
+    }
+
+    const batch = db.batch();
+
+    snap.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    if (snap.size < batchSize) {
+      break;
+    }
+  }
+}
+
+function getPreviousWeekKey(weekKey) {
+  const date = new Date(`${weekKey}T00:00:00`);
+  date.setDate(date.getDate() - 7);
+  return formatDateKey(date);
+}
+
+
 // =====================
 // 認証
 // =====================
@@ -305,7 +371,7 @@ async function registerUser(event) {
 
     sessionStorage.setItem("loginMode", "staff");
     clearRegisterForm();
-    showToast("登録できました。承認待ちです");
+    showToast("登録できました。ログインできます");
   } catch (error) {
     console.error(error);
     if (error.code === "auth/email-already-in-use") {
@@ -355,7 +421,7 @@ async function handleAuthStateChanged(user) {
 
   try {
     state.currentUser = user;
-    state.weekInfo = buildWeekInfo();
+
 
     const profile = await ensureUserProfile(user);
     state.currentProfile = profile;
@@ -509,6 +575,9 @@ function accountStatusOrder(status) {
 // 共通ロード
 // =====================
 async function loadCommonWeekData() {
+  state.weekInfo = buildWeekInfo();
+  await runWeeklyCleanupIfNeeded();
+
   const weekKey = state.weekInfo.key;
 
   const [applications, assignments, approvedUsers] = await Promise.all([
@@ -521,6 +590,8 @@ async function loadCommonWeekData() {
   state.assignments = assignments;
   state.approvedUsers = approvedUsers;
 }
+
+
 
 // =====================
 // スタッフ画面
