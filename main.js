@@ -451,9 +451,12 @@ async function ensureUserProfile(user) {
   const ref = db.collection(COLLECTIONS.staffs).doc(user.uid);
   const snap = await ref.get();
 
+  const registerInputDisplayName = el.registerDisplayName?.value.trim() || "";
+
   const fallbackDisplayName =
-    user.displayName?.trim() ||
-    (user.email ? user.email.split("@")[0] : "ユーザー");
+  user.displayName?.trim() ||
+  registerInputDisplayName ||
+  (user.email ? user.email.split("@")[0] : "ユーザー");
 
   if (!snap.exists) {
     const newProfile = {
