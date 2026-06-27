@@ -501,21 +501,19 @@ async function ensureUserProfile(user) {
     (user.email ? user.email.split("@")[0] : "ユーザー");
 
   if (!snap.exists) {
-    const displayOrder = await getNextDisplayOrder();
+  const newProfile = {
+    uid: user.uid,
+    email: user.email || "",
+    displayName: fallbackDisplayName,
+    status: "approved",
+    role: "staff",
+    displayOrder: 9999,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
 
-    const newProfile = {
-      uid: user.uid,
-      email: user.email || "",
-      displayName: fallbackDisplayName,
-      status: "approved",
-      role: "staff",
-      displayOrder,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    await ref.set(newProfile, { merge: true });
-    return newProfile;
-  }
+  await ref.set(newProfile, { merge: true });
+  return newProfile;
+}
 
   const data = snap.data();
   const merged = {
