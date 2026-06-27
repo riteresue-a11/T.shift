@@ -90,14 +90,24 @@ input {
 .card-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.card-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .card-head h2,
 .card h2,
 .card h3 {
+  margin: 0;
+}
+
+.card-head .week-label {
   margin: 0;
 }
 
@@ -170,17 +180,18 @@ input {
   white-space: nowrap;
 }
 
-.auth-tab-buttons,
-.mode-tabs {
+.auth-tab-buttons {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin: 14px 0;
 }
 
-.mode-tabs[data-three],
-.operator-three-tabs {
-  grid-template-columns: repeat(3, 1fr);
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
 }
 
 .tab-button,
@@ -581,4 +592,147 @@ input {
 #staff-account-display-name,
 #staff-account-email {
   word-break: break-all;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.action-row .small-inline {
+  flex: 1 1 140px;
+}
+
+#staff-final-table,
+#manager-final-edit-table,
+#manager-published-table,
+#operator-final-table {
+  margin-top: 8px;
+}
+
+#staff-apply-week-label,
+#manager-draft-week-label,
+#manager-published-week-label,
+#operator-published-week-label {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .mode-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .action-row .small-inline {
+    width: 100%;
+  }
+}
+
+.matrix-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.matrix-table th,
+.matrix-table td {
+  border: 1px solid var(--line);
+  padding: 12px 10px;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 15px;
+  min-width: 92px;
+  height: 64px;
+}
+
+.matrix-table thead th {
+  background: var(--surface-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.matrix-table tbody th {
+  background: var(--surface-2);
+  font-weight: 700;
+  text-align: left;
+  min-width: 110px;
+  white-space: nowrap;
+}
+
+.matrix-table td.x-cell {
+  color: var(--text);
+}
+
+.matrix-table td.blank-cell {
+  color: transparent;
+}
+
+.matrix-table td.time-cell {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.editable-table td {
+  padding: 0;
+}
+
+.draft-cell-button {
+  width: 100%;
+  height: 64px;
+  border: none;
+  background: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  transition: background 0.15s ease;
+}
+
+.draft-cell-button:hover {
+  background: #f7f9fc;
+}
+
+.draft-cell-button.x-cell {
+  color: var(--text);
+}
+
+.draft-cell-button.blank-cell {
+  color: transparent;
+}
+
+.draft-cell-button.time-cell {
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .matrix-table {
+    min-width: 640px;
+  }
+
+  .matrix-table th,
+  .matrix-table td {
+    min-width: 84px;
+    height: 58px;
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+
+  .matrix-table tbody th {
+    min-width: 96px;
+  }
+
+  .draft-cell-button {
+    height: 58px;
+    font-size: 14px;
+  }
 }

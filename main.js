@@ -34,6 +34,13 @@ const SHIFT_LABELS = {
   late: "遅番"
 };
 
+const SHIFT_TIME_LABELS = {
+  early: "17:00〜",
+  late: "19:00〜"
+};
+
+const CELL_EDIT_ORDER = [null, "early", "late", "blank"];
+
 const state = {
   currentUser: null,
   currentProfile: null,
@@ -41,7 +48,12 @@ const state = {
   weekInfo: null,
   approvedUsers: [],
   applications: [],
-  assignments: []
+  draftAssignments: [],
+  publishedAssignments: [],
+  shiftState: {
+    currentPublishedWeekKey: null,
+    backupPublishedWeekKey: null
+  }
 };
 
 // =====================
@@ -78,6 +90,7 @@ const el = {
   pendingStatus: document.getElementById("pending-status"),
 
   staffWeekLabel: document.getElementById("staff-week-label"),
+  staffApplyWeekLabel: document.getElementById("staff-apply-week-label"),
   staffFinalTable: document.getElementById("staff-final-table"),
   staffApplyList: document.getElementById("staff-apply-list"),
 
@@ -90,6 +103,8 @@ const el = {
   cancelWithdrawBtn: document.getElementById("cancel-withdraw-btn"),
 
   managerWeekLabel: document.getElementById("manager-week-label"),
+  managerDraftWeekLabel: document.getElementById("manager-draft-week-label"),
+  managerPublishedWeekLabel: document.getElementById("manager-published-week-label"),
   managerSummary: document.getElementById("manager-summary"),
   managerRecruitingList: document.getElementById("manager-recruiting-list"),
   submittedList: document.getElementById("submitted-list"),
@@ -97,8 +112,12 @@ const el = {
   generateScheduleBtn: document.getElementById("generate-schedule-btn"),
   managerFinalEditTable: document.getElementById("manager-final-edit-table"),
   saveFinalEditBtn: document.getElementById("save-final-edit-btn"),
+  publishDraftBtn: document.getElementById("publish-draft-btn"),
+  unpublishBtn: document.getElementById("unpublish-btn"),
+  managerPublishedTable: document.getElementById("manager-published-table"),
 
   operatorWeekLabel: document.getElementById("operator-week-label"),
+  operatorPublishedWeekLabel: document.getElementById("operator-published-week-label"),
   operatorRecruitingList: document.getElementById("operator-recruiting-list"),
   operatorFinalTable: document.getElementById("operator-final-table"),
   operatorAccountList: document.getElementById("operator-account-list")
@@ -139,6 +158,10 @@ function bindEvents() {
 
   el.generateScheduleBtn?.addEventListener("click", generateSchedule);
   el.saveFinalEditBtn?.addEventListener("click", saveManualAssignments);
+  el.publishDraftBtn?.addEventListener("click", publishDraftAssignments);
+  el.unpublishBtn?.addEventListener("click", unpublishCurrentPublished);
+
+  el.managerFinalEditTable?.addEventListener("click", handleDraftCellClick);
   el.operatorAccountList?.addEventListener("click", handleOperatorActionClick);
 }
 
@@ -198,9 +221,12 @@ function handleTabClick(event) {
   button.classList.add("active");
 
   if (group === "staff") {
-    togglePanels(["staff-final-panel", "staff-apply-panel"], target);
+    togglePanels(["staff-final-panel", "staff-apply-panel", "staff-account-panel"], target);
   } else if (group === "manager") {
-    togglePanels(["manager-recruiting-panel", "manager-final-panel"], target);
+    togglePanels(
+      ["manager-recruiting-panel", "manager-final-panel", "manager-published-panel"],
+      target
+    );
   } else if (group === "operator") {
     togglePanels(
       ["operator-recruiting-panel", "operator-final-panel", "operator-account-panel"],
@@ -262,8 +288,8 @@ function buildApplicationId(weekKey, dayIndex, shiftType, userId) {
   return `${weekKey}_${dayIndex}_${shiftType}_${userId}`;
 }
 
-function buildAssignmentId(weekKey, dayIndex, shiftType) {
-  return `${weekKey}_${dayIndex}_${shiftType}`;
+function buildAssignmentId(weekKey, userId, dayIndex) {
+  return `${weekKey}_${userId}_${dayIndex}`;
 }
 
 async function runWeeklyCleanupIfNeeded() {
@@ -333,6 +359,20 @@ function getPreviousWeekKey(weekKey) {
 // =====================
 // 認証
 // =====================
+async function getNextDisplayOrder() {
+  const snap = await db.collection(COLLECTIONS.staffs).get();
+  let maxOrder = 0;
+
+  snap.forEach((doc) => {
+    const value = Number(doc.data().displayOrder) || 0;
+    if (value > maxOrder) {
+      maxOrder = value;
+    }
+  });
+
+  return maxOrder + 1;
+}
+
 async function registerUser(event) {
   event.preventDefault();
 
@@ -360,12 +400,15 @@ async function registerUser(event) {
     const userCredential = await auth.createUserWithEmailAndPassword(email, password);
     await userCredential.user.updateProfile({ displayName });
 
+    const displayOrder = await getNextDisplayOrder();
+
     await db.collection(COLLECTIONS.staffs).doc(userCredential.user.uid).set({
       uid: userCredential.user.uid,
       email,
       displayName,
       status: "approved",
       role: "staff",
+      displayOrder,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
@@ -452,21 +495,24 @@ async function ensureUserProfile(user) {
   const snap = await ref.get();
 
   const registerInputDisplayName = el.registerDisplayName?.value.trim() || "";
-
   const fallbackDisplayName =
-  user.displayName?.trim() ||
-  registerInputDisplayName ||
-  (user.email ? user.email.split("@")[0] : "ユーザー");
+    user.displayName?.trim() ||
+    registerInputDisplayName ||
+    (user.email ? user.email.split("@")[0] : "ユーザー");
 
   if (!snap.exists) {
+    const displayOrder = await getNextDisplayOrder();
+
     const newProfile = {
       uid: user.uid,
       email: user.email || "",
       displayName: fallbackDisplayName,
       status: "approved",
       role: "staff",
+      displayOrder,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
+
     await ref.set(newProfile, { merge: true });
     return newProfile;
   }
@@ -477,10 +523,18 @@ async function ensureUserProfile(user) {
     email: data.email || user.email || "",
     displayName: data.displayName || fallbackDisplayName,
     status: data.status || "approved",
-    role: data.role || "staff"
+    role: data.role || "staff",
+    displayOrder: Number(data.displayOrder) || 9999
   };
 
-  if (!data.uid || !data.email || !data.displayName || !data.status || !data.role) {
+  if (
+    !data.uid ||
+    !data.email ||
+    !data.displayName ||
+    !data.status ||
+    !data.role ||
+    !data.displayOrder
+  ) {
     await ref.set(merged, { merge: true });
   }
 
@@ -528,6 +582,26 @@ async function enterMode(mode) {
 // =====================
 // Firestore取得
 // =====================
+function buildWeekInfoFromWeekKey(weekKey) {
+  if (!weekKey) return null;
+
+  const monday = new Date(`${weekKey}T00:00:00`);
+  const dates = [];
+
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push(d);
+  }
+
+  return {
+    key: weekKey,
+    monday,
+    dates,
+    label: `${formatMonthDay(dates[0])}(${DAY_NAMES[0]})〜${formatMonthDay(dates[5])}(${DAY_NAMES[5]})`
+  };
+}
+
 async function fetchWeekApplications(weekKey) {
   const snap = await db.collection(COLLECTIONS.applications)
     .where("weekKey", "==", weekKey)
@@ -536,12 +610,68 @@ async function fetchWeekApplications(weekKey) {
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-async function fetchWeekAssignments(weekKey) {
+async function fetchAssignmentsByStatus(weekKey, status) {
+  if (!weekKey) return [];
+
+  const snap = await db.collection(COLLECTIONS.assignments)
+    .where("weekKey", "==", weekKey)
+    .where("status", "==", status)
+    .get();
+
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+async function fetchLegacyWeekAssignments(weekKey) {
+  if (!weekKey) return [];
+
   const snap = await db.collection(COLLECTIONS.assignments)
     .where("weekKey", "==", weekKey)
     .get();
 
   return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+function convertLegacyAssignmentsToCells(assignments) {
+  return assignments
+    .filter((item) => item.assignedUserId && item.shiftType)
+    .map((item) => ({
+      id: `legacy_${item.weekKey}_${item.assignedUserId}_${item.dayIndex}`,
+      weekKey: item.weekKey,
+      userId: item.assignedUserId,
+      dayIndex: item.dayIndex,
+      assignedShiftType: item.shiftType,
+      assignedDisplayName: item.assignedDisplayName || "",
+      displayOrder: 9999,
+      status: "published"
+    }));
+}
+
+async function fetchShiftState() {
+  const snap = await db.collection(COLLECTIONS.systemMeta).doc("shift_state").get();
+
+  if (!snap.exists) {
+    return {
+      currentPublishedWeekKey: null,
+      backupPublishedWeekKey: null
+    };
+  }
+
+  const data = snap.data() || {};
+  return {
+    currentPublishedWeekKey: data.currentPublishedWeekKey || null,
+    backupPublishedWeekKey: data.backupPublishedWeekKey || null
+  };
+}
+
+async function saveShiftState(nextState) {
+  await db.collection(COLLECTIONS.systemMeta).doc("shift_state").set(
+    {
+      currentPublishedWeekKey: nextState.currentPublishedWeekKey || null,
+      backupPublishedWeekKey: nextState.backupPublishedWeekKey || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    },
+    { merge: true }
+  );
 }
 
 async function fetchApprovedUsers() {
@@ -551,7 +681,12 @@ async function fetchApprovedUsers() {
 
   return snap.docs
     .map((doc) => ({ id: doc.id, ...doc.data() }))
-    .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "ja"));
+    .sort((a, b) => {
+      const orderA = Number(a.displayOrder) || 9999;
+      const orderB = Number(b.displayOrder) || 9999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.displayName || "").localeCompare(b.displayName || "", "ja");
+    });
 }
 
 async function fetchAllAccounts() {
@@ -560,9 +695,14 @@ async function fetchAllAccounts() {
   return snap.docs
     .map((doc) => ({ id: doc.id, ...doc.data() }))
     .sort((a, b) => {
-      const orderA = accountStatusOrder(a.status);
-      const orderB = accountStatusOrder(b.status);
+      const orderA = Number(a.displayOrder) || 9999;
+      const orderB = Number(b.displayOrder) || 9999;
       if (orderA !== orderB) return orderA - orderB;
+
+      const statusA = accountStatusOrder(a.status);
+      const statusB = accountStatusOrder(b.status);
+      if (statusA !== statusB) return statusA - statusB;
+
       return (a.displayName || "").localeCompare(b.displayName || "", "ja");
     });
 }
@@ -574,6 +714,7 @@ function accountStatusOrder(status) {
   return 3;
 }
 
+
 // =====================
 // 共通ロード
 // =====================
@@ -581,20 +722,43 @@ async function loadCommonWeekData() {
   state.weekInfo = buildWeekInfo();
   await runWeeklyCleanupIfNeeded();
 
-  const weekKey = state.weekInfo.key;
+  const recruitWeekKey = state.weekInfo.key;
 
-  const [applications, assignments, approvedUsers] = await Promise.all([
-    fetchWeekApplications(weekKey),
-    fetchWeekAssignments(weekKey),
-    fetchApprovedUsers()
+  const [applications, draftAssignments, approvedUsers, shiftState] = await Promise.all([
+    fetchWeekApplications(recruitWeekKey),
+    fetchAssignmentsByStatus(recruitWeekKey, "draft"),
+    fetchApprovedUsers(),
+    fetchShiftState()
   ]);
 
+  let publishedAssignments = [];
+
+  if (shiftState.currentPublishedWeekKey) {
+    publishedAssignments = await fetchAssignmentsByStatus(
+      shiftState.currentPublishedWeekKey,
+      "published"
+    );
+  } else {
+    const fallbackWeekKey = getPreviousWeekKey(recruitWeekKey);
+    const legacyAssignments = await fetchLegacyWeekAssignments(fallbackWeekKey);
+    publishedAssignments = convertLegacyAssignmentsToCells(legacyAssignments);
+
+    if (publishedAssignments.length) {
+      shiftState.currentPublishedWeekKey = fallbackWeekKey;
+    }
+  }
+
   state.applications = applications;
-  state.assignments = assignments;
+  state.draftAssignments = draftAssignments;
+  state.publishedAssignments = publishedAssignments;
   state.approvedUsers = approvedUsers;
+  state.shiftState = shiftState;
 }
 
-
+function getCurrentPublishedWeekInfo() {
+  if (!state.shiftState?.currentPublishedWeekKey) return null;
+  return buildWeekInfoFromWeekKey(state.shiftState.currentPublishedWeekKey);
+}
 
 // =====================
 // スタッフ画面
@@ -602,12 +766,24 @@ async function loadCommonWeekData() {
 async function loadStaffScreen() {
   await loadCommonWeekData();
 
-  el.staffWeekLabel.textContent = `対象週 ${state.weekInfo.label}`;
+  const publishedWeekInfo = getCurrentPublishedWeekInfo();
+
+  el.staffWeekLabel.textContent = publishedWeekInfo
+    ? `公開週 ${publishedWeekInfo.label}`
+    : "公開週 -";
+
+  el.staffApplyWeekLabel.textContent = `募集週 ${state.weekInfo.label}`;
   el.staffAccountDisplayName.textContent = state.currentProfile?.displayName || "-";
   el.staffAccountEmail.textContent = state.currentProfile?.email || "-";
   closeWithdrawConfirm();
 
-  renderReadonlySchedule(el.staffFinalTable, state.assignments);
+  renderReadonlySchedule(
+    el.staffFinalTable,
+    publishedWeekInfo,
+    state.approvedUsers,
+    state.publishedAssignments
+  );
+
   renderStaffApplyList(state.applications);
 }
 
@@ -677,6 +853,7 @@ async function handleApplyButtonClick(event) {
         shiftType,
         userId: user.uid,
         displayName: state.currentProfile.displayName,
+        displayOrder: Number(state.currentProfile.displayOrder) || 9999,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       showToast("応募しました");
@@ -695,11 +872,31 @@ async function handleApplyButtonClick(event) {
 async function loadManagerScreen() {
   await loadCommonWeekData();
 
-  el.managerWeekLabel.textContent = `対象週 ${state.weekInfo.label}`;
+  const publishedWeekInfo = getCurrentPublishedWeekInfo();
+
+  el.managerWeekLabel.textContent = `募集週 ${state.weekInfo.label}`;
+  el.managerDraftWeekLabel.textContent = `作成対象週 ${state.weekInfo.label}`;
+  el.managerPublishedWeekLabel.textContent = publishedWeekInfo
+    ? `公開中週 ${publishedWeekInfo.label}`
+    : "公開中週 -";
+
   renderManagerSummary();
   renderRecruitingList(el.managerRecruitingList, state.applications);
   renderSubmissionStatus();
-  renderEditableSchedule(el.managerFinalEditTable, state.assignments);
+
+  renderEditableSchedule(
+    el.managerFinalEditTable,
+    state.weekInfo,
+    state.approvedUsers,
+    state.draftAssignments
+  );
+
+  renderReadonlySchedule(
+    el.managerPublishedTable,
+    publishedWeekInfo,
+    state.approvedUsers,
+    state.publishedAssignments
+  );
 }
 
 function renderManagerSummary() {
@@ -748,10 +945,12 @@ function renderRecruitingList(container, applications) {
   container.innerHTML = state.weekInfo.dates.map((date, dayIndex) => {
     const earlyApplicants = applications
       .filter((app) => app.dayIndex === dayIndex && app.shiftType === "early")
+      .sort(compareApplicants)
       .map((app) => app.displayName);
 
     const lateApplicants = applications
       .filter((app) => app.dayIndex === dayIndex && app.shiftType === "late")
+      .sort(compareApplicants)
       .map((app) => app.displayName);
 
     return `
@@ -780,124 +979,116 @@ function renderRecruitingList(container, applications) {
   }).join("");
 }
 
-function renderEditableSchedule(container, assignments) {
-  const assignmentMap = createAssignmentMap(assignments);
-
-  const headerCells = `
-    <div class="cell header"></div>
-    ${state.weekInfo.dates.map((date, index) => {
-      return `<div class="cell header">${formatMonthDay(date)}<br>${DAY_NAMES[index]}</div>`;
-    }).join("")}
-  `;
-
-  const rows = SHIFT_TYPES.map((shiftType) => {
-    const cells = state.weekInfo.dates.map((_, dayIndex) => {
-      const assignment = assignmentMap[`${dayIndex}_${shiftType}`];
-      const value = assignment?.assignedDisplayName || "";
-      return `
-        <div class="cell input-cell">
-          <input
-            class="assignment-input"
-            type="text"
-            data-edit-day="${dayIndex}"
-            data-edit-shift="${shiftType}"
-            value="${escapeHtml(value)}"
-            placeholder="名前を入力"
-          />
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div class="cell side">${SHIFT_LABELS[shiftType]}</div>
-      ${cells}
-    `;
-  }).join("");
-
-  container.innerHTML = `
-    <div class="table-wrap">
-      <div class="schedule-grid">
-        ${headerCells}
-        ${rows}
-      </div>
-    </div>
-  `;
+function compareApplicants(a, b) {
+  const orderA = Number(a.displayOrder) || 9999;
+  const orderB = Number(b.displayOrder) || 9999;
+  if (orderA !== orderB) return orderA - orderB;
+  return (a.displayName || "").localeCompare(b.displayName || "", "ja");
 }
 
 async function saveManualAssignments() {
   try {
-    const inputs = el.managerFinalEditTable.querySelectorAll("[data-edit-day]");
+    const buttons = el.managerFinalEditTable.querySelectorAll("[data-edit-user][data-edit-day]");
     const batch = db.batch();
-    const approvedMap = Object.fromEntries(
-      state.approvedUsers.map((user) => [normalizeName(user.displayName), user])
-    );
+    const weekKey = state.weekInfo.key;
+    const userMap = Object.fromEntries(state.approvedUsers.map((user) => [user.uid, user]));
 
-    inputs.forEach((input) => {
-      const dayIndex = Number(input.dataset.editDay);
-      const shiftType = input.dataset.editShift;
-      const name = input.value.trim();
-      const docId = buildAssignmentId(state.weekInfo.key, dayIndex, shiftType);
-      const ref = db.collection(COLLECTIONS.assignments).doc(docId);
+    buttons.forEach((button) => {
+      const userId = button.dataset.editUser;
+      const dayIndex = Number(button.dataset.editDay);
+      const cellValueRaw = button.dataset.cellValue || "x";
+      const cellValue = cellValueRaw === "x" ? null : cellValueRaw;
 
-      if (!name) {
+      const ref = db.collection(COLLECTIONS.assignments).doc(
+        buildAssignmentId(weekKey, userId, dayIndex)
+      );
+
+      if (!cellValue) {
         batch.delete(ref);
         return;
       }
 
-      const matchedUser = approvedMap[normalizeName(name)] || null;
+      const user = userMap[userId];
+      if (!user) return;
 
       batch.set(ref, {
-        weekKey: state.weekInfo.key,
+        weekKey,
+        userId,
         dayIndex,
-        shiftType,
-        assignedUserId: matchedUser ? matchedUser.uid : null,
-        assignedDisplayName: name,
+        assignedShiftType: cellValue,
+        assignedDisplayName: user.displayName || "",
+        displayOrder: Number(user.displayOrder) || 9999,
+        status: "draft",
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedBy: state.currentUser.uid,
-        manual: true
+        updatedBy: state.currentUser.uid
       }, { merge: true });
     });
 
     await batch.commit();
-    showToast("確定版を保存しました");
+    showToast("作成中シフトを保存しました");
     await loadManagerScreen();
   } catch (error) {
     console.error(error);
-    showToast("確定版の保存に失敗しました");
+    showToast("作成中シフトの保存に失敗しました");
   }
+}
+
+async function clearDraftAssignmentsForWeek(weekKey) {
+  const snap = await db.collection(COLLECTIONS.assignments)
+    .where("weekKey", "==", weekKey)
+    .where("status", "==", "draft")
+    .get();
+
+  if (snap.empty) return;
+
+  const batch = db.batch();
+  snap.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
+}
+
+async function clearBackupAssignments() {
+  const snap = await db.collection(COLLECTIONS.assignments)
+    .where("status", "==", "backup")
+    .get();
+
+  if (snap.empty) return;
+
+  const batch = db.batch();
+  snap.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
 }
 
 async function generateSchedule() {
   try {
     await loadCommonWeekData();
 
-    const existingMap = createAssignmentMap(state.assignments);
+    const weekKey = state.weekInfo.key;
     const assignmentCounts = {};
     state.approvedUsers.forEach((user) => {
       assignmentCounts[user.uid] = 0;
     });
 
-    state.assignments.forEach((assignment) => {
-      if (assignment.assignedUserId) {
-        assignmentCounts[assignment.assignedUserId] =
-          (assignmentCounts[assignment.assignedUserId] || 0) + 1;
-      }
-    });
+    const selectedMap = {};
+    const appliedByUserDay = {};
 
-    const batch = db.batch();
+    state.applications.forEach((app) => {
+      const key = `${app.userId}_${app.dayIndex}`;
+      if (!appliedByUserDay[key]) {
+        appliedByUserDay[key] = {
+          userId: app.userId,
+          dayIndex: app.dayIndex,
+          displayName: app.displayName || "",
+          displayOrder: Number(app.displayOrder) || 9999,
+          shiftTypes: []
+        };
+      }
+      appliedByUserDay[key].shiftTypes.push(app.shiftType);
+    });
 
     for (let dayIndex = 0; dayIndex < 6; dayIndex++) {
       const chosenForDay = new Set();
 
       for (const shiftType of SHIFT_TYPES) {
-        const existing = existingMap[`${dayIndex}_${shiftType}`];
-        if (existing && existing.assignedDisplayName) {
-          if (existing.assignedUserId) {
-            chosenForDay.add(existing.assignedUserId);
-          }
-          continue;
-        }
-
         const candidates = state.applications
           .filter((app) => app.dayIndex === dayIndex && app.shiftType === shiftType)
           .filter((app) => !chosenForDay.has(app.userId));
@@ -907,24 +1098,44 @@ async function generateSchedule() {
         const selected = pickFairCandidate(candidates, assignmentCounts);
         if (!selected) continue;
 
-        const ref = db.collection(COLLECTIONS.assignments)
-          .doc(buildAssignmentId(state.weekInfo.key, dayIndex, shiftType));
-
-        batch.set(ref, {
-          weekKey: state.weekInfo.key,
+        selectedMap[`${selected.userId}_${dayIndex}`] = {
+          userId: selected.userId,
           dayIndex,
-          shiftType,
-          assignedUserId: selected.userId,
+          assignedShiftType: shiftType,
           assignedDisplayName: selected.displayName,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedBy: state.currentUser.uid,
-          manual: false
-        }, { merge: true });
+          displayOrder: Number(selected.displayOrder) || 9999
+        };
 
         chosenForDay.add(selected.userId);
         assignmentCounts[selected.userId] = (assignmentCounts[selected.userId] || 0) + 1;
       }
     }
+
+    await clearDraftAssignmentsForWeek(weekKey);
+
+    const batch = db.batch();
+
+    Object.values(appliedByUserDay).forEach((item) => {
+      const selected = selectedMap[`${item.userId}_${item.dayIndex}`];
+      const assignedShiftType = selected ? selected.assignedShiftType : "blank";
+
+      const ref = db.collection(COLLECTIONS.assignments).doc(
+        buildAssignmentId(weekKey, item.userId, item.dayIndex)
+      );
+
+      batch.set(ref, {
+        weekKey,
+        userId: item.userId,
+        dayIndex: item.dayIndex,
+        assignedShiftType,
+        assignedDisplayName: item.displayName,
+        displayOrder: item.displayOrder,
+        status: "draft",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: state.currentUser.uid,
+        manual: false
+      }, { merge: true });
+    });
 
     await batch.commit();
     showToast("自動シフト作成を実行しました");
@@ -952,15 +1163,125 @@ function pickFairCandidate(candidates, assignmentCounts) {
   return leastAssigned[randomIndex];
 }
 
+async function publishDraftAssignments() {
+  try {
+    const weekKey = state.weekInfo.key;
+    const draftAssignments = await fetchAssignmentsByStatus(weekKey, "draft");
+
+    if (!draftAssignments.length) {
+      showToast("公開する作成中シフトがありません");
+      return;
+    }
+
+    await clearBackupAssignments();
+
+    const batch = db.batch();
+
+    if (state.shiftState.currentPublishedWeekKey) {
+      const currentPublished = await fetchAssignmentsByStatus(
+        state.shiftState.currentPublishedWeekKey,
+        "published"
+      );
+
+      currentPublished.forEach((item) => {
+        const ref = db.collection(COLLECTIONS.assignments).doc(item.id);
+        batch.set(ref, { status: "backup" }, { merge: true });
+      });
+    }
+
+    draftAssignments.forEach((item) => {
+      const ref = db.collection(COLLECTIONS.assignments).doc(item.id);
+      batch.set(ref, {
+        status: "published",
+        publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        publishedBy: state.currentUser.uid
+      }, { merge: true });
+    });
+
+    await batch.commit();
+
+    await saveShiftState({
+      currentPublishedWeekKey: weekKey,
+      backupPublishedWeekKey: state.shiftState.currentPublishedWeekKey || null
+    });
+
+    showToast("作成中シフトを公開しました");
+    await loadManagerScreen();
+  } catch (error) {
+    console.error(error);
+    showToast("公開に失敗しました");
+  }
+}
+
+async function unpublishCurrentPublished() {
+  try {
+    const currentWeekKey = state.shiftState.currentPublishedWeekKey;
+    const backupWeekKey = state.shiftState.backupPublishedWeekKey;
+
+    if (!currentWeekKey || currentWeekKey !== state.weekInfo.key) {
+      showToast("取り消せる公開中シフトがありません");
+      return;
+    }
+
+    if (!backupWeekKey) {
+      showToast("戻す前の公開済みシフトがありません");
+      return;
+    }
+
+    const [currentPublished, backupAssignments] = await Promise.all([
+      fetchAssignmentsByStatus(currentWeekKey, "published"),
+      fetchAssignmentsByStatus(backupWeekKey, "backup")
+    ]);
+
+    const batch = db.batch();
+
+    currentPublished.forEach((item) => {
+      const ref = db.collection(COLLECTIONS.assignments).doc(item.id);
+      batch.set(ref, { status: "draft" }, { merge: true });
+    });
+
+    backupAssignments.forEach((item) => {
+      const ref = db.collection(COLLECTIONS.assignments).doc(item.id);
+      batch.set(ref, { status: "published" }, { merge: true });
+    });
+
+    await batch.commit();
+
+    await saveShiftState({
+      currentPublishedWeekKey: backupWeekKey,
+      backupPublishedWeekKey: null
+    });
+
+    showToast("公開を取り消しました");
+    await loadManagerScreen();
+  } catch (error) {
+    console.error(error);
+    showToast("公開取り消しに失敗しました");
+  }
+}
+
+
 // =====================
 // 運営者画面
 // =====================
 async function loadOperatorScreen() {
   await loadCommonWeekData();
 
-  el.operatorWeekLabel.textContent = `対象週 ${state.weekInfo.label}`;
+  const publishedWeekInfo = getCurrentPublishedWeekInfo();
+
+  el.operatorWeekLabel.textContent = `募集週 ${state.weekInfo.label}`;
+  el.operatorPublishedWeekLabel.textContent = publishedWeekInfo
+    ? `公開中週 ${publishedWeekInfo.label}`
+    : "公開中週 -";
+
   renderRecruitingList(el.operatorRecruitingList, state.applications);
-  renderReadonlySchedule(el.operatorFinalTable, state.assignments);
+
+  renderReadonlySchedule(
+    el.operatorFinalTable,
+    publishedWeekInfo,
+    state.approvedUsers,
+    state.publishedAssignments
+  );
 
   const accounts = await fetchAllAccounts();
   renderOperatorAccounts(accounts);
@@ -973,6 +1294,7 @@ function renderOperatorAccounts(accounts) {
     const status = account.status || "pending";
     const role = account.role || "staff";
     const isSelf = state.currentUser && account.uid === state.currentUser.uid;
+    const displayOrder = Number(account.displayOrder) || 9999;
 
     return `
       <div class="account-card">
@@ -984,6 +1306,7 @@ function renderOperatorAccounts(accounts) {
         </div>
 
         <div class="account-badges">
+          <span class="chip">順番 ${displayOrder}</span>
           <span class="chip">${escapeHtml(status)}</span>
           <span class="chip">${escapeHtml(role)}</span>
         </div>
@@ -1067,49 +1390,162 @@ async function handleOperatorActionClick(event) {
   }
 }
 
+
 // =====================
 // 表描画
 // =====================
 function createAssignmentMap(assignments) {
   const map = {};
   assignments.forEach((assignment) => {
-    map[`${assignment.dayIndex}_${assignment.shiftType}`] = assignment;
+    map[`${assignment.userId}_${assignment.dayIndex}`] = assignment;
   });
   return map;
 }
 
-function renderReadonlySchedule(container, assignments) {
+function getCellVisual(cellValue) {
+  if (cellValue === "early" || cellValue === "late") {
+    return {
+      text: SHIFT_TIME_LABELS[cellValue],
+      className: "time-cell"
+    };
+  }
+
+  if (cellValue === "blank") {
+    return {
+      text: "",
+      className: "blank-cell"
+    };
+  }
+
+  return {
+    text: "×",
+    className: "x-cell"
+  };
+}
+
+function renderReadonlySchedule(container, weekInfo, users, assignments) {
+  if (!container) return;
+
+  if (!weekInfo) {
+    container.innerHTML = `<p class="muted">公開中シフトはまだありません。</p>`;
+    return;
+  }
+
   const assignmentMap = createAssignmentMap(assignments);
 
-  const headerCells = `
-    <div class="cell header"></div>
-    ${state.weekInfo.dates.map((date, index) => {
-      return `<div class="cell header">${formatMonthDay(date)}<br>${DAY_NAMES[index]}</div>`;
-    }).join("")}
-  `;
+  const headCells = weekInfo.dates.map((date, index) => {
+    return `<th>${formatMonthDay(date)}<br>${DAY_NAMES[index]}</th>`;
+  }).join("");
 
-  const rows = SHIFT_TYPES.map((shiftType) => {
-    const cells = state.weekInfo.dates.map((_, dayIndex) => {
-      const assignment = assignmentMap[`${dayIndex}_${shiftType}`];
-      const name = assignment?.assignedDisplayName || "未定";
-      const emptyClass = assignment?.assignedDisplayName ? "" : "empty";
-      return `<div class="cell ${emptyClass}">${escapeHtml(name)}</div>`;
+  const rows = users.map((user) => {
+    const cells = weekInfo.dates.map((_, dayIndex) => {
+      const assignment = assignmentMap[`${user.uid}_${dayIndex}`];
+      const cellValue = assignment?.assignedShiftType || null;
+      const visual = getCellVisual(cellValue);
+      const textHtml = visual.text ? escapeHtml(visual.text) : "&nbsp;";
+
+      return `<td class="${visual.className}">${textHtml}</td>`;
     }).join("");
 
     return `
-      <div class="cell side">${SHIFT_LABELS[shiftType]}</div>
-      ${cells}
+      <tr>
+        <th>${escapeHtml(user.displayName || "未設定")}</th>
+        ${cells}
+      </tr>
     `;
   }).join("");
 
   container.innerHTML = `
     <div class="table-wrap">
-      <div class="schedule-grid">
-        ${headerCells}
-        ${rows}
-      </div>
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th></th>
+            ${headCells}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
     </div>
   `;
+}
+
+function renderEditableSchedule(container, weekInfo, users, assignments) {
+  if (!container) return;
+
+  const assignmentMap = createAssignmentMap(assignments);
+
+  const headCells = weekInfo.dates.map((date, index) => {
+    return `<th>${formatMonthDay(date)}<br>${DAY_NAMES[index]}</th>`;
+  }).join("");
+
+  const rows = users.map((user) => {
+    const cells = weekInfo.dates.map((_, dayIndex) => {
+      const assignment = assignmentMap[`${user.uid}_${dayIndex}`];
+      const cellValue = assignment?.assignedShiftType || null;
+      const visual = getCellVisual(cellValue);
+      const textHtml = visual.text ? escapeHtml(visual.text) : "&nbsp;";
+
+      return `
+        <td>
+          <button
+            type="button"
+            class="draft-cell-button ${visual.className}"
+            data-edit-user="${user.uid}"
+            data-edit-day="${dayIndex}"
+            data-cell-value="${cellValue ?? "x"}"
+          >
+            ${textHtml}
+          </button>
+        </td>
+      `;
+    }).join("");
+
+    return `
+      <tr>
+        <th>${escapeHtml(user.displayName || "未設定")}</th>
+        ${cells}
+      </tr>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table class="matrix-table editable-table">
+        <thead>
+          <tr>
+            <th></th>
+            ${headCells}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function getNextCellEditValue(currentValue) {
+  const current = currentValue === "x" ? null : currentValue;
+  const currentIndex = CELL_EDIT_ORDER.indexOf(current);
+  const nextIndex = (currentIndex + 1) % CELL_EDIT_ORDER.length;
+  return CELL_EDIT_ORDER[nextIndex];
+}
+
+function handleDraftCellClick(event) {
+  const button = event.target.closest("[data-edit-user][data-edit-day]");
+  if (!button) return;
+
+  const currentValue = button.dataset.cellValue || "x";
+  const nextValue = getNextCellEditValue(currentValue);
+  const visual = getCellVisual(nextValue);
+
+  button.dataset.cellValue = nextValue ?? "x";
+  button.className = `draft-cell-button ${visual.className}`;
+  button.innerHTML = visual.text ? escapeHtml(visual.text) : "&nbsp;";
 }
 
 // =====================

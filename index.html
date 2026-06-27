@@ -73,189 +73,235 @@
 
     <!-- スタッフ画面 -->
     <section id="staff-screen" class="screen hidden">
-      <header class="screen-header">
+  <header class="screen-header">
+    <div>
+      <h1>スタッフ画面</h1>
+      <p class="week-label">公開中シフトと次回提出を確認できます</p>
+    </div>
+    <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-tab-group="staff" data-tab-target="staff-final-panel" type="button">公開中シフト</button>
+    <button class="mode-tab" data-tab-group="staff" data-tab-target="staff-apply-panel" type="button">シフト提出</button>
+    <button class="mode-tab" data-tab-group="staff" data-tab-target="staff-account-panel" type="button">アカウント設定</button>
+  </div>
+
+  <div id="staff-final-panel" class="panel">
+    <div class="card">
+      <div class="card-head">
         <div>
-          <h1>スタッフ画面</h1>
+          <h2>公開中シフト</h2>
           <p id="staff-week-label" class="week-label">対象週 -</p>
         </div>
-        <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
-      </header>
+        <span class="badge readonly">閲覧専用</span>
+      </div>
+      <div id="staff-final-table"></div>
+    </div>
+  </div>
 
-      <div class="mode-tabs">
-        <button class="mode-tab active" data-tab-group="staff" data-tab-target="staff-final-panel" type="button">確定版</button>
-        <button class="mode-tab" data-tab-group="staff" data-tab-target="staff-apply-panel" type="button">シフト提出</button>
+  <div id="staff-apply-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>シフト提出</h2>
+          <p id="staff-apply-week-label" class="week-label">募集週 -</p>
+        </div>
+        <span class="badge editable">提出可能</span>
+      </div>
+      <div id="staff-apply-list" class="day-card-list"></div>
+    </div>
+  </div>
+
+  <div id="staff-account-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <h2>アカウント設定</h2>
+        <span class="badge readonly">本人操作</span>
       </div>
 
-      <div id="staff-final-panel" class="panel">
-        <div class="card">
-          <div class="card-head">
-            <h2>確定版シフト</h2>
-            <span class="badge readonly">閲覧専用</span>
-          </div>
-          <div id="staff-final-table"></div>
+      <div class="pending-info">
+        <div>
+          <span>表示名</span>
+          <strong id="staff-account-display-name">-</strong>
+        </div>
+        <div>
+          <span>メール</span>
+          <strong id="staff-account-email">-</strong>
         </div>
       </div>
 
-      <div id="staff-apply-panel" class="panel hidden">
-        <div class="card">
-          <div class="card-head">
-            <h2>シフト提出</h2>
-            <span class="badge editable">提出可能</span>
-          </div>
-          <div id="staff-apply-list" class="day-card-list"></div>
+      <p class="muted">
+        退会すると、このサイトにログインできなくなります。<br>
+        未確定の応募データとスタッフ情報は削除されます。<br>
+        公開済みシフトは履歴として残る場合があります。
+      </p>
+
+      <button id="open-withdraw-btn" class="ghost-button full" type="button">
+        退会する
+      </button>
+
+      <div id="withdraw-confirm-box" class="hidden" style="margin-top: 12px;">
+        <label class="field-label">パスワード再入力</label>
+        <input
+          id="withdraw-password"
+          class="input"
+          type="password"
+          placeholder="現在のパスワード"
+        />
+
+        <div style="display: grid; gap: 8px; margin-top: 12px;">
+          <button id="confirm-withdraw-btn" class="primary-button full" type="button">
+            退会を確定する
+          </button>
+          <button id="cancel-withdraw-btn" class="ghost-button full" type="button">
+            キャンセル
+          </button>
         </div>
-      </div>
-      <div id="staff-account-panel" class="panel">
-  <div class="card">
-    <div class="card-head">
-      <h2>アカウント設定</h2>
-      <span class="badge readonly">本人操作</span>
-    </div>
-
-    <div class="pending-info">
-      <div>
-        <span>表示名</span>
-        <strong id="staff-account-display-name">-</strong>
-      </div>
-      <div>
-        <span>メール</span>
-        <strong id="staff-account-email">-</strong>
-      </div>
-    </div>
-
-    <p class="muted">
-      退会すると、このサイトにログインできなくなります。<br>
-      未確定の応募データとスタッフ情報は削除されます。<br>
-      確定済みシフトは履歴として残る場合があります。
-    </p>
-
-    <button id="open-withdraw-btn" class="ghost-button full" type="button">
-      退会する
-    </button>
-
-    <div id="withdraw-confirm-box" class="hidden" style="margin-top: 12px;">
-      <label class="field-label">パスワード再入力</label>
-      <input
-        id="withdraw-password"
-        class="input"
-        type="password"
-        placeholder="現在のパスワード"
-      />
-
-      <div style="display: grid; gap: 8px; margin-top: 12px;">
-        <button id="confirm-withdraw-btn" class="primary-button full" type="button">
-          退会を確定する
-        </button>
-        <button id="cancel-withdraw-btn" class="ghost-button full" type="button">
-          キャンセル
-        </button>
       </div>
     </div>
   </div>
-</div>
-    </section>
+</section>
+
 
     <!-- 管理者画面 -->
     <section id="manager-screen" class="screen hidden">
-      <header class="screen-header">
+  <header class="screen-header">
+    <div>
+      <h1>管理者画面</h1>
+      <p class="week-label">募集状況・作成中・公開中を管理します</p>
+    </div>
+    <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-tab-group="manager" data-tab-target="manager-recruiting-panel" type="button">募集中</button>
+    <button class="mode-tab" data-tab-group="manager" data-tab-target="manager-final-panel" type="button">作成中</button>
+    <button class="mode-tab" data-tab-group="manager" data-tab-target="manager-published-panel" type="button">公開中</button>
+  </div>
+
+  <div id="manager-recruiting-panel" class="panel">
+    <div class="card">
+      <div class="card-head">
         <div>
-          <h1>管理者画面</h1>
-          <p id="manager-week-label" class="week-label">対象週 -</p>
+          <h2>募集中シフト</h2>
+          <p id="manager-week-label" class="week-label">募集週 -</p>
         </div>
-        <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
-      </header>
-
-      <div class="mode-tabs">
-        <button class="mode-tab active" data-tab-group="manager" data-tab-target="manager-recruiting-panel" type="button">募集中シフト</button>
-        <button class="mode-tab" data-tab-group="manager" data-tab-target="manager-final-panel" type="button">確定版編集</button>
+        <span class="badge readonly">応募状況</span>
       </div>
+      <div id="manager-summary" class="summary-grid"></div>
+      <div id="manager-recruiting-list"></div>
+    </div>
 
-      <div id="manager-recruiting-panel" class="panel">
-        <div id="manager-summary" class="summary-grid"></div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>募集中シフト</h2>
-            <button id="generate-schedule-btn" class="primary-button small-inline" type="button">自動シフト作成</button>
-          </div>
-          <div id="manager-recruiting-list"></div>
+    <div class="card">
+      <div class="card-head">
+        <h2>提出状況</h2>
+      </div>
+      <div class="status-lists">
+        <div>
+          <h3>提出済み</h3>
+          <div id="submitted-list" class="chip-list"></div>
         </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h2>提出状況</h2>
-          </div>
-          <div class="status-lists">
-            <div>
-              <h3>提出済み</h3>
-              <div id="submitted-list" class="chip-list"></div>
-            </div>
-            <div>
-              <h3>未提出</h3>
-              <div id="not-submitted-list" class="chip-list"></div>
-            </div>
-          </div>
+        <div>
+          <h3>未提出</h3>
+          <div id="not-submitted-list" class="chip-list"></div>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div id="manager-final-panel" class="panel hidden">
-        <div class="card">
-          <div class="card-head">
-            <h2>確定版編集</h2>
-            <span class="badge manager">管理者編集</span>
-          </div>
-          <div id="manager-final-edit-table"></div>
-          <button id="save-final-edit-btn" class="primary-button full" type="button">確定版を保存</button>
+  <div id="manager-final-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>作成中シフト</h2>
+          <p id="manager-draft-week-label" class="week-label">作成対象週 -</p>
         </div>
+        <span class="badge manager">管理者編集</span>
       </div>
-    </section>
+
+      <div class="action-row">
+        <button id="generate-schedule-btn" class="primary-button small-inline" type="button">自動シフト作成</button>
+        <button id="save-final-edit-btn" class="secondary-button small-inline" type="button">作成中を保存</button>
+        <button id="publish-draft-btn" class="ghost-button small-inline" type="button">公開する</button>
+      </div>
+
+      <div id="manager-final-edit-table"></div>
+    </div>
+  </div>
+
+  <div id="manager-published-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>公開中シフト</h2>
+          <p id="manager-published-week-label" class="week-label">公開中週 -</p>
+        </div>
+        <span class="badge readonly">スタッフ表示対象</span>
+      </div>
+
+      <div class="action-row">
+        <button id="unpublish-btn" class="ghost-button small-inline" type="button">公開を取り消す</button>
+      </div>
+
+      <div id="manager-published-table"></div>
+    </div>
+  </div>
+</section>
+
 
     <!-- 運営者画面 -->
     <section id="operator-screen" class="screen hidden">
-      <header class="screen-header">
+  <header class="screen-header">
+    <div>
+      <h1>運営者画面</h1>
+      <p class="week-label">公開中シフトとアカウント管理を確認できます</p>
+    </div>
+    <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-tab-group="operator" data-tab-target="operator-recruiting-panel" type="button">募集中</button>
+    <button class="mode-tab" data-tab-group="operator" data-tab-target="operator-final-panel" type="button">公開中</button>
+    <button class="mode-tab" data-tab-group="operator" data-tab-target="operator-account-panel" type="button">アカウント管理</button>
+  </div>
+
+  <div id="operator-recruiting-panel" class="panel">
+    <div class="card">
+      <div class="card-head">
         <div>
-          <h1>運営者画面</h1>
-          <p id="operator-week-label" class="week-label">対象週 -</p>
+          <h2>募集中シフト</h2>
+          <p id="operator-week-label" class="week-label">募集週 -</p>
         </div>
-        <button class="ghost-button small" data-logout-button type="button">ログアウト</button>
-      </header>
-
-      <div class="mode-tabs">
-        <button class="mode-tab active" data-tab-group="operator" data-tab-target="operator-recruiting-panel" type="button">募集中</button>
-        <button class="mode-tab" data-tab-group="operator" data-tab-target="operator-final-panel" type="button">確定版</button>
-        <button class="mode-tab" data-tab-group="operator" data-tab-target="operator-account-panel" type="button">アカウント管理</button>
+        <span class="badge readonly">閲覧のみ</span>
       </div>
+      <div id="operator-recruiting-list"></div>
+    </div>
+  </div>
 
-      <div id="operator-recruiting-panel" class="panel">
-        <div class="card">
-          <div class="card-head">
-            <h2>募集中シフト</h2>
-            <span class="badge readonly">閲覧のみ</span>
-          </div>
-          <div id="operator-recruiting-list"></div>
+  <div id="operator-final-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <h2>公開中シフト</h2>
+          <p id="operator-published-week-label" class="week-label">公開中週 -</p>
         </div>
+        <span class="badge readonly">閲覧のみ</span>
       </div>
+      <div id="operator-final-table"></div>
+    </div>
+  </div>
 
-      <div id="operator-final-panel" class="panel hidden">
-        <div class="card">
-          <div class="card-head">
-            <h2>確定版シフト</h2>
-            <span class="badge readonly">閲覧のみ</span>
-          </div>
-          <div id="operator-final-table"></div>
-        </div>
+  <div id="operator-account-panel" class="panel hidden">
+    <div class="card">
+      <div class="card-head">
+        <h2>アカウント管理</h2>
+        <span class="badge operator">運営者専用</span>
       </div>
-
-      <div id="operator-account-panel" class="panel hidden">
-        <div class="card">
-          <div class="card-head">
-            <h2>アカウント管理</h2>
-            <span class="badge operator">運営者専用</span>
-          </div>
-          <div id="operator-account-list" class="account-list"></div>
-        </div>
-      </div>
-    </section>
+      <div id="operator-account-list" class="account-list"></div>
+    </div>
+  </div>
+</section>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
